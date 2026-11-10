@@ -1,0 +1,68 @@
+server:
+  port: ${BACKEND_PORT:8080}
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      timeout: 24h
+      cookie:
+        http-only: true
+        secure: ${SESSION_COOKIE_SECURE:false}
+        same-site: lax
+  error:
+    include-stacktrace: never
+    include-message: never
+
+spring:
+  config:
+    import: optional:classpath:application-local.yml
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/iba_testing}
+    username: ${POSTGRES_USER:iba}
+    password: ${POSTGRES_PASSWORD:change-me}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+  session:
+    timeout: 24h
+    jdbc:
+      initialize-schema: never
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 26MB
+
+app:
+  cors-origins: ${CORS_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  media-dir: ${MEDIA_DIR:./data/media}
+  max-upload-bytes: ${MAX_UPLOAD_BYTES:20971520}
+  frontend-origin: ${FRONTEND_ORIGIN:http://localhost:5173}
+  admin:
+    email: ${ADMIN_EMAIL:admin@example.com}
+    password: ${ADMIN_PASSWORD:change-me}
+    display-name: ${ADMIN_DISPLAY_NAME:Administrator}
+    login-secret: ${ADMIN_LOGIN_SECRET:}
+  mail:
+    enabled: ${MAIL_ENABLED:false}
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    from-email: ${MAIL_FROM:}
+    from-name: ${MAIL_FROM_NAME:IBA English}
+    start-tls: ${MAIL_START_TLS:true}
+
+springdoc:
+  api-docs:
+    path: /api/docs
+  swagger-ui:
+    path: /api/swagger

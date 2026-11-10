@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fefefe" />
+    <title>IBA English</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700" rel="stylesheet" />
+    <style>
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: #fefefe;
+      }
+      #boot-splash {
+        box-sizing: border-box;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        background: #fefefe;
+      }
+      #boot-splash .spinner {
+        width: 28px;
+        height: 28px;
+        border: 2px solid rgba(22, 74, 161, 0.22);
+        border-top-color: #164aa1;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-splash .spinner {
+          animation: none;
+          border-top-color: rgba(22, 74, 161, 0.45);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="boot-splash" role="status" aria-live="polite" aria-label="Загрузка">
+        <span class="spinner" aria-hidden="true"></span>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

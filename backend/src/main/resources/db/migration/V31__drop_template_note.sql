@@ -1,0 +1,1 @@
+ALTER TABLE exam_templates DROP COLUMN IF EXISTS note;
