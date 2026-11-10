@@ -10,7 +10,7 @@
 
 ## tests
 
-`id`, `owner_id`, `title`, `description`, `exam_preset`, `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), `public_token`, `public_token_expires_at`, `settings`, `created_at`, `updated_at`. Тесты только на английском, отдельного поля языка нет. Срок ссылки задаётся настройкой `linkLifetimeHours` (по умолчанию 12, 0 – без ограничения) и записывается в `public_token_expires_at` в момент публикации или замены.
+`id`, `owner_id`, `title`, `description`, `exam_preset`, `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), `public_token`, `public_token_expires_at`, `settings`, `created_at`, `updated_at`. Тесты только на английском, отдельного поля языка нет. Ссылка действует 12 часов: срок записывается в `public_token_expires_at` в момент публикации или замены ссылки.
 
 `settings` хранит общее время, окно доступности, обязательность имени и показ результата участнику.
 

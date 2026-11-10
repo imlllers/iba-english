@@ -4,12 +4,12 @@
 
 ## IELTS
 
-Секции: Listening → Reading → Writing. **Speaking в шаблоне нет.**
+Секции: Listening → Reading → Writing → Speaking.
 
-- Части: L Part 1–4, R Passage 1–3, W Task 1–2.
+- Части: L Part 1-4, R Passage 1-3, W Task 1-2, S Part 1-3.
 - Нумерация по секции; страница = вся часть.
 - Назад по вопросам и частям – да; по секциям – нет.
-- Время: Listening 30, Reading 60, Writing 60 мин.
+- Время: Listening 30, Reading 60, Writing 60, Speaking 14 мин.
 - Аудио без автостарта; результат: балл + разбор; focus loss = 2; досрочная сдача разрешена.
 
 ## TOEFL (фиксированный набор 2026)
@@ -28,7 +28,7 @@
 
 Секции: Listening → Reading → Writing → Speaking.
 
-- Listening Part 1–4, Reading Part 5–7; Writing и Speaking без частей (преподаватель добавляет Written ×8 и Speaking ×11).
+- Listening Part 1-4, Reading Part 5-7; Writing и Speaking без частей (преподаватель добавляет Written ×8 и Speaking ×11).
 - Нумерация по всему тесту.
 - Назад по вопросам и частям – да; по секциям – нет.
 - **Блок-таймер 120 мин** на Listening+Reading (`timeLimitMinutes` + `timeLimitSectionTypes`); Writing 60; Speaking 20.
