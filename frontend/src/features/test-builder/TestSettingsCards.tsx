@@ -1,5 +1,10 @@
-import { NumberInput, Stack } from "@mantine/core";
-import { DISABLED_SUFFIX, ERROR_EXPLANATIONS_ENABLED, QUESTION_NUMBER_FORMATS, RESULT_DISPLAY_ENABLED, RESULT_REVIEW_ENABLED } from "@/entities/test/settings";
+import { Stack } from "@mantine/core";
+import {
+  DISABLED_SUFFIX,
+  errorExplanationsEnabled,
+  QUESTION_NUMBER_FORMATS,
+  resultDisplayEnabled,
+} from "@/entities/test/settings";
 import type {
   ErrorExplanationMode,
   QuestionNumberFormat,
@@ -7,18 +12,12 @@ import type {
   ResultDetail,
   TestSettings,
 } from "@/entities/test/types";
-import { ScaleBindingCard, type ScaleTarget } from "@/features/score-scales/ScaleBindingCard";
+import { GatedNumberInput, GatedSelect } from "@/shared/ui/GatedField";
+import { buildResultOptions, effectiveResultDetail } from "@/entities/test/resultDisplay";
 import { Select } from "@/shared/ui/Select";
 import { SettingsCard } from "@/shared/ui/SettingsCard";
 import { SettingsSectionTitle } from "@/shared/ui/SettingsSectionTitle";
 import { Switch } from "@/shared/ui/Switch";
-
-const RESULT_OPTIONS: { value: ResultDetail; label: string; disabled?: boolean }[] = [
-  { value: "score_only", label: "Только балл" },
-  RESULT_REVIEW_ENABLED
-    ? { value: "score_and_review", label: "Балл и отображение ответов" }
-    : { value: "score_and_review", label: "Балл и отображение ответов" + DISABLED_SUFFIX, disabled: true },
-];
 
 const ERROR_EXPLANATION_WHEN_OPTIONS: { value: Exclude<ErrorExplanationMode, "off">; label: string }[] = [
   { value: "during", label: "Во время прохождения" },
@@ -29,109 +28,101 @@ const ERROR_EXPLANATION_WHEN_OPTIONS: { value: Exclude<ErrorExplanationMode, "of
 const NUMBER_FORMAT_OPTIONS = QUESTION_NUMBER_FORMATS.map((value) => ({ value, label: value }));
 
 const NUMBER_SCOPE_OPTIONS: { value: QuestionNumberScope; label: string }[] = [
-  { value: "test", label: "Сплошная по тесту" },
-  { value: "section", label: "С каждой секции" },
-  { value: "part", label: "С каждой части" },
+  { value: "test", label: "Сквозная" },
+  { value: "section", label: "По секциям" },
+  { value: "part", label: "По частям" },
 ];
 
 export function TestSettingsCards({
   settings,
   onChange,
-  scaleTargets,
 }: {
   settings: TestSettings;
   onChange: (patch: Partial<TestSettings>) => void;
-  scaleTargets?: ScaleTarget[];
 }) {
-  const showResult = RESULT_DISPLAY_ENABLED && settings.showResultToParticipant;
-  const resultDetail: ResultDetail =
-    RESULT_REVIEW_ENABLED && settings.resultDetail === "score_and_review" ? "score_and_review" : "score_only";
+  const displayResults = resultDisplayEnabled(settings.examType);
+  const explanationsOn = errorExplanationsEnabled(settings.examType);
+  const showResult = displayResults && settings.showResultToParticipant;
+  const resultDetail = effectiveResultDetail(settings.resultDetail, Boolean(settings.scoreScale));
   const explanationMode = settings.errorExplanationMode ?? "off";
-  const showExplanations = ERROR_EXPLANATIONS_ENABLED && explanationMode !== "off";
+  const showExplanations = explanationsOn && explanationMode !== "off";
   const explanationWhen: Exclude<ErrorExplanationMode, "off"> =
     explanationMode === "during" || explanationMode === "both" ? explanationMode : "after";
-
+  const hideNumbering = settings.examType === "TOEFL";
   return (
     <>
       <SettingsCard>
         <Stack gap="md">
-          <SettingsSectionTitle>Доступ</SettingsSectionTitle>
+          <SettingsSectionTitle>Навигация</SettingsSectionTitle>
           <Switch
-            label="Спрашивать email участника"
-            description="Перед стартом участник вводит email. На него можно отправлять результат"
-            checked={settings.requireParticipantEmail}
-            onChange={(checked) => onChange({ requireParticipantEmail: checked })}
+            label="Один вопрос на странице"
+            description="Если выключено, на странице показывается вся часть. У каждой части можно задать своё значение"
+            checked={settings.oneQuestionPerPage ?? true}
+            onChange={(checked) => onChange({ oneQuestionPerPage: checked })}
+          />
+          <Switch
+            label="Возврат к предыдущим секциям"
+            description="Разрешает открыть завершённую секцию"
+            checked={settings.allowBackToSection ?? true}
+            onChange={(checked) => onChange({ allowBackToSection: checked })}
+          />
+          <Switch
+            label="Досрочное завершение"
+            description="Кнопка завершения теста доступна в любой момент"
+            checked={settings.allowEarlySubmit !== false}
+            onChange={(checked) => onChange({ allowEarlySubmit: checked })}
           />
         </Stack>
       </SettingsCard>
 
       <SettingsCard>
         <Stack gap="md">
-          <SettingsSectionTitle>Прохождение</SettingsSectionTitle>
-          <Select
-            label="Формат нумерации"
-            withAsterisk
-            value={settings.questionNumberFormat ?? "1"}
-            options={NUMBER_FORMAT_OPTIONS}
-            onChange={(value) => onChange({ questionNumberFormat: (value as QuestionNumberFormat) || "1" })}
-          />
-          <Select
-            label="Нумерация заданий"
-            withAsterisk
-            value={settings.questionNumberScope ?? "test"}
-            options={NUMBER_SCOPE_OPTIONS}
-            onChange={(value) => onChange({ questionNumberScope: (value as QuestionNumberScope) || "test" })}
-          />
+          <SettingsSectionTitle>Время</SettingsSectionTitle>
           <Switch
-            label="Каждый вопрос с новой страницы"
-            description="Если выключено: при наличии частей – одна страница на часть, иначе – на секцию. У отдельной части можно задать своё значение"
-            checked={settings.oneQuestionPerPage ?? true}
-            onChange={(checked) => onChange({ oneQuestionPerPage: checked })}
-          />
-          <Switch
-            label="Можно возвращаться в пройденную секцию"
-            description="Разрешает снова открыть секцию после перехода к следующей"
-            checked={settings.allowBackToSection ?? true}
-            onChange={(checked) => onChange({ allowBackToSection: checked })}
-          />
-          <Switch
-            label="Досрочная сдача"
-            description="Показать кнопку завершить тест до последней страницы. Если выключено – Finish только в конце"
-            checked={settings.allowEarlySubmit !== false}
-            onChange={(checked) => onChange({ allowEarlySubmit: checked })}
-          />
-          <Switch
-            label="Автопереход по таймеру задания"
-            description="Когда время на задание истекло – сразу следующее (как в TOEFL)"
+            label="Автопереход по истечении времени вопроса"
+            description="Для вопросов, у которых задано время на вкладке «Время»"
             checked={Boolean(settings.autoAdvanceOnQuestionTimeout)}
             onChange={(checked) => onChange({ autoAdvanceOnQuestionTimeout: checked })}
           />
-          {settings.examType === "TOEFL" ? (
-            <NumberInput
-              label="Время на ответ в Listening, сек"
-              description="Отсчёт начинается после аудио, затем вопрос перелистывается сам. Действует на все вопросы Listening"
-              value={settings.listeningAnswerSeconds ?? 20}
-              min={5}
-              max={600}
-              allowDecimal={false}
-              onChange={(value) => onChange({ listeningAnswerSeconds: typeof value === "number" && value > 0 ? value : 20 })}
-            />
-          ) : null}
           <Switch
-            label="Перемешивать варианты ответа"
-            description="Порядок вариантов в заданиях с выбором у каждого участника будет случайным"
-            checked={settings.shuffleChoices ?? false}
-            onChange={(checked) => onChange({ shuffleChoices: checked })}
+            label="Автопереход по истечении времени части"
+            description="Когда время части вышло, тест сам переходит к следующей части"
+            checked={Boolean(settings.autoAdvanceOnPartTimeout)}
+            onChange={(checked) => onChange({ autoAdvanceOnPartTimeout: checked })}
           />
           <Switch
-            label="Автозапуск аудио"
-            description="Аудио блока и задания стартует при входе на страницу (иначе участник жмёт Play). Пауза и перемотка назад недоступны. При лимите времени на задание отсчёт начнётся после прослушивания"
+            label="Пауза таймера части во время прослушивания аудио/видео"
+            description="Время части учитывается только при ответе на вопросы"
+            checked={Boolean(settings.pausePartTimerDuringAudio)}
+            onChange={(checked) => onChange({ pausePartTimerDuringAudio: checked })}
+          />
+        </Stack>
+      </SettingsCard>
+
+      <SettingsCard>
+        <Stack gap="md">
+          <SettingsSectionTitle>Аудио и видео</SettingsSectionTitle>
+          <Switch
+            label="Автовоспроизведение аудио"
+            description="Аудио запускается при открытии страницы, без паузы и перемотки. Время на ответ начинается после окончания записи"
             checked={settings.audioAutoStart ?? false}
             onChange={(checked) => onChange({ audioAutoStart: checked })}
           />
           <Switch
-            label="Контроль ухода со страницы"
-            description="При переключении на другую вкладку или окно участник получает предупреждение. После лимита попытка сдаётся автоматически"
+            label="Автовоспроизведение видео"
+            description="Видео в вопросе запускается при открытии страницы"
+            checked={Boolean(settings.videoAutoStart)}
+            onChange={(checked) => onChange({ videoAutoStart: checked })}
+          />
+        </Stack>
+      </SettingsCard>
+
+      <SettingsCard>
+        <Stack gap="md">
+          <SettingsSectionTitle>Контроль</SettingsSectionTitle>
+          <Switch
+            label="Контроль выхода из окна теста"
+            description="Предупреждение при переходе на другую вкладку или окно"
             checked={(settings.focusLossMaxWarnings ?? 0) > 0}
             onChange={(checked) =>
               onChange({
@@ -139,83 +130,109 @@ export function TestSettingsCards({
               })
             }
           />
-          {(settings.focusLossMaxWarnings ?? 0) > 0 && (
-            <NumberInput
-              label="Число предупреждений"
-              withAsterisk
-              value={settings.focusLossMaxWarnings ?? 3}
-              min={1}
-              max={20}
-              onChange={(value) => {
-                const next = typeof value === "number" && value > 0 ? value : 3;
-                onChange({ focusLossMaxWarnings: next });
-              }}
-            />
-          )}
+          <GatedNumberInput
+            active={(settings.focusLossMaxWarnings ?? 0) > 0}
+            label="Допустимое число предупреждений"
+            description="После превышения попытка завершается автоматически"
+            withAsterisk
+            value={settings.focusLossMaxWarnings ?? 3}
+            min={1}
+            max={20}
+            allowDecimal={false}
+            onChange={(value) => {
+              const next = typeof value === "number" && value > 0 ? value : 3;
+              onChange({ focusLossMaxWarnings: next });
+            }}
+          />
         </Stack>
       </SettingsCard>
 
-      {scaleTargets && (
-        <ScaleBindingCard value={settings.scoreScale} examType={settings.examType} targets={scaleTargets} onChange={(scoreScale) => onChange({ scoreScale })} />
-      )}
-
       <SettingsCard>
         <Stack gap="md">
-          <SettingsSectionTitle>После сдачи</SettingsSectionTitle>
+          <SettingsSectionTitle>Результаты</SettingsSectionTitle>
           <Switch
-            label={RESULT_DISPLAY_ENABLED ? "Показывать результат участнику" : "Показывать результат участнику" + DISABLED_SUFFIX}
-            description="После отправки участник увидит страницу с итогом. Если выключено – только подтверждение сдачи"
-            disabled={!RESULT_DISPLAY_ENABLED}
+            label={displayResults ? "Отображение результата" : "Отображение результата" + DISABLED_SUFFIX}
+            description="Если выключено, отображается только подтверждение отправки"
+            disabled={!displayResults}
             checked={showResult}
             onChange={(checked) => onChange({ showResultToParticipant: checked })}
           />
-          {showResult && (
-            <Select
-              label="Что показывать"
-              withAsterisk
-              value={resultDetail}
-              options={RESULT_OPTIONS}
-              onChange={(value) => onChange({ resultDetail: (value as ResultDetail) || "score_only" })}
-            />
-          )}
-          {showResult && settings.scoreScale && (
-            <Switch
-              label="Показывать уровень и баллы по секциям"
-              description="На странице результата появятся баллы шкалы по секциям и итоговый уровень"
-              checked={settings.showLevelToParticipant}
-              onChange={(checked) => onChange({ showLevelToParticipant: checked })}
-            />
-          )}
+          <GatedSelect
+            active={displayResults && settings.showResultToParticipant}
+            label="Что отображать"
+            withAsterisk
+            value={resultDetail}
+            options={buildResultOptions(Boolean(settings.scoreScale))}
+            onChange={(value) => onChange({ resultDetail: (value as ResultDetail) || "score_only" })}
+          />
           <Switch
-            label="Отправлять результат на email"
+            label="Отправка результата на email"
             description={
               settings.requireParticipantEmail
-                ? "Письмо уходит сразу после сдачи, а если нужна ручная проверка – когда проверены все задания"
-                : "Включите «Спрашивать email участника», чтобы было куда отправлять"
+                ? "Письмо уходит сразу после сдачи, а если нужна ручная проверка – когда проверены все вопросы"
+                : "Включите «Запрашивать email перед началом», чтобы было куда отправлять"
             }
             disabled={!settings.requireParticipantEmail}
             checked={settings.emailResultToParticipant && settings.requireParticipantEmail}
-            onChange={(checked) => onChange({ emailResultToParticipant: checked })}
+            onChange={(checked) =>
+              onChange({
+                emailResultToParticipant: checked,
+                ...(checked ? { requireParticipantEmail: true } : {}),
+              })
+            }
           />
           <Switch
-            label={ERROR_EXPLANATIONS_ENABLED ? "Пояснения при ошибке" : "Пояснения при ошибке – временно недоступны"}
-            description="В редакторе заданий появится поле пояснения. Участник видит текст только при неверном автоответе (или после проверки, если балл неполный)"
-            disabled={!ERROR_EXPLANATIONS_ENABLED}
+            label={
+              explanationsOn
+                ? "Пояснения к неверным ответам"
+                : "Пояснения к неверным ответам" + DISABLED_SUFFIX
+            }
+            description="В редакторе вопросов появится поле для пояснения. Студент увидит его, если ответил неверно"
+            disabled={!explanationsOn}
             checked={showExplanations}
             onChange={(checked) => onChange({ errorExplanationMode: checked ? "after" : "off" })}
           />
-          {showExplanations && (
-            <Select
-              label="Когда показывать"
-              withAsterisk
-              value={explanationWhen}
-              options={ERROR_EXPLANATION_WHEN_OPTIONS}
-              onChange={(value) =>
-                onChange({
-                  errorExplanationMode: (value as Exclude<ErrorExplanationMode, "off">) || "after",
-                })
-              }
-            />
+          <GatedSelect
+            active={explanationsOn && showExplanations}
+            label="Когда отображать"
+            withAsterisk
+            value={explanationWhen}
+            options={ERROR_EXPLANATION_WHEN_OPTIONS}
+            onChange={(value) =>
+              onChange({
+                errorExplanationMode: (value as Exclude<ErrorExplanationMode, "off">) || "after",
+              })
+            }
+          />
+        </Stack>
+      </SettingsCard>
+
+      <SettingsCard>
+        <Stack gap="md">
+          <SettingsSectionTitle>Прочее</SettingsSectionTitle>
+          <Switch
+            label="Запрашивать email перед началом"
+            description="Без email студент не сможет начать. На этот адрес можно отправлять результат"
+            checked={settings.requireParticipantEmail}
+            onChange={(checked) => onChange({ requireParticipantEmail: checked })}
+          />
+          {hideNumbering ? null : (
+            <>
+              <Select
+                label="Формат номера вопроса"
+                withAsterisk
+                value={settings.questionNumberFormat ?? "1"}
+                options={NUMBER_FORMAT_OPTIONS}
+                onChange={(value) => onChange({ questionNumberFormat: (value as QuestionNumberFormat) || "1" })}
+              />
+              <Select
+                label="Нумерация вопросов"
+                withAsterisk
+                value={settings.questionNumberScope ?? "test"}
+                options={NUMBER_SCOPE_OPTIONS}
+                onChange={(value) => onChange({ questionNumberScope: (value as QuestionNumberScope) || "test" })}
+              />
+            </>
           )}
         </Stack>
       </SettingsCard>

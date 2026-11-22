@@ -1,15 +1,15 @@
 import { Box, Stack, Text } from "@mantine/core";
 import type { AnswerData, PublicQuestion } from "@/entities/question/types";
 import type { ExamDisplayType, QuestionNumberFormat } from "@/entities/test/types";
-import { blankIds } from "./content";
 import { ENGINES } from "./engines";
 import { ContentFeedView, type ExamAudioBinding } from "./content/ContentFeedView";
-import { questionItems, promptItemId } from "./content/contentItems";
+import { contentItemFilled, questionItems, promptItemId } from "./content/contentItems";
 import { instructionHasContent, toInstructionDoc } from "./content/instructionDoc";
 import { docIsOnlyTable, passageFrameStyle } from "./content/passageFrame";
 import { useMedia } from "./media/MediaContext";
 import { ownQuestionsHeading, questionSlotCount } from "./numbering";
 import { PromptView } from "./prompt/PromptView";
+import { questionHasTaskVideo } from "@/features/test-taking/layouts/toefl/questionTaskVideo";
 import { engineOf } from "./registry";
 
 type QuestionPlayerProps = {
@@ -28,6 +28,17 @@ type QuestionPlayerProps = {
   parenLetters?: boolean;
   headingBelowInstructions?: boolean;
   plainPrompt?: boolean;
+  hideInstructions?: boolean;
+  hideTaskAudio?: boolean;
+  hideWordCount?: boolean;
+  showWordCountToggle?: boolean;
+  onToggleWordCount?: () => void;
+  speakingAutoFlow?: boolean;
+  speakingPromptReady?: boolean;
+  onSpeakingComplete?: () => void;
+  autoPlayTaskVideo?: boolean;
+  listeningContentGate?: boolean;
+  teacherReview?: boolean;
 };
 
 export function QuestionPlayer({
@@ -40,12 +51,23 @@ export function QuestionPlayer({
   numberFormat = "1",
   examType = "CUSTOM",
   examAudio,
-  hideQuestionsHeading = false,
+  hideQuestionsHeading = examType === "TOEFL",
   hideAnswer = false,
   hideBlankNumbers = examType === "TOEFL",
   parenLetters = examType === "TOEFL",
   headingBelowInstructions = examType === "TOEFL",
   plainPrompt = examType === "TOEFL" && engineOf(question.type) === "WRITTEN",
+  hideInstructions = false,
+  hideTaskAudio = false,
+  hideWordCount = false,
+  showWordCountToggle = false,
+  onToggleWordCount,
+  speakingAutoFlow = false,
+  speakingPromptReady = true,
+  onSpeakingComplete,
+  autoPlayTaskVideo = false,
+  listeningContentGate = false,
+  teacherReview = false,
 }: QuestionPlayerProps) {
   const ui = ENGINES[engineOf(question.type)];
   const Player = ui.Player;
@@ -58,13 +80,13 @@ export function QuestionPlayer({
   const slotCount = questionSlotCount(question, examType);
   const multiSelectRange = question.type === "MULTIPLE_SELECT" && slotCount > 1;
   const hideSideKicker =
-    plainPrompt
+    examType === "TOEFL"
+    || plainPrompt
     || sharedPassage
     || multiSelectRange
     || question.type === "MATCHING"
     || question.type === "SENTENCE_GAPS";
-  const headingHidden = hideQuestionsHeading || (examType === "TOEFL" && blankIds(question.promptContent).length === 0);
-  const questionsHeading = headingHidden ? null : ownQuestionsHeading(question, startNumber, examType);
+  const questionsHeading = hideQuestionsHeading ? null : ownQuestionsHeading(question, startNumber, examType);
   const kickerLabel = `${kicker}${question.required ? "" : " · optional"}`;
   const kickerNode = (
     <span
@@ -74,6 +96,65 @@ export function QuestionPlayer({
       {kickerLabel}
     </span>
   );
+  const toeflSpeakingVideoStack = examType === "TOEFL"
+    && engineOf(question.type) === "SPEAKING"
+    && speakingAutoFlow
+    && questionHasTaskVideo(question);
+  const toeflVisualSplit = !teacherReview && examType === "TOEFL" && !toeflSpeakingVideoStack && items.some(
+    (item) => (item.kind === "image" || item.kind === "video") && contentItemFilled(item),
+  );
+  const visualTaskItems = toeflVisualSplit
+    ? items.filter((item) => (item.kind === "image" || item.kind === "video") && contentItemFilled(item))
+    : [];
+  const bodyTaskItems = toeflSpeakingVideoStack
+    ? items.filter((item) => item.kind !== "video")
+    : toeflVisualSplit
+      ? items.filter((item) => item.kind !== "image" && item.kind !== "video")
+      : items;
+  const gatedBodyItems = listeningContentGate
+    ? bodyTaskItems.filter((item) => (item.kind === "audio" && item.mediaId)
+      || ((item.kind === "image" || item.kind === "video") && contentItemFilled(item)))
+    : bodyTaskItems;
+  const showPromptText = !listeningContentGate && hasPromptText;
+  const renderPrompt = () => (showPromptText ? (
+    hideSideKicker ? (
+      examType === "TOEFL" ? (
+        <Box className="question-prompt-row">
+          <PromptView doc={question.promptContent} />
+        </Box>
+      ) : (
+        <PromptView doc={question.promptContent} />
+      )
+    ) : (
+      <Box
+        className="question-prompt-row"
+        style={{
+          display: "flex",
+          gap: "0.5rem",
+          alignItems: "baseline",
+        }}
+      >
+        {kickerNode}
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <PromptView doc={question.promptContent} />
+        </Box>
+      </Box>
+    )
+  ) : null);
+  const contentFeed = (feedItems: typeof items) => (
+    <ContentFeedView
+      items={feedItems}
+      promptId={promptItemId(items)}
+      renderPrompt={renderPrompt}
+      playbackLimit={question.settings.playbackLimit ?? 0}
+      playbackKey={media.playbackScope ? `iba-plays:${media.playbackScope}:${question.id}` : undefined}
+      examAudio={examAudio}
+      hideAudio={hideTaskAudio || teacherReview}
+      autoPlayVideo={autoPlayTaskVideo}
+      hideVideoControls={examType === "TOEFL" && !teacherReview}
+      teacherReview={teacherReview}
+    />
+  );
   const player = (
     <Player
       question={question}
@@ -82,9 +163,70 @@ export function QuestionPlayer({
       readOnly={readOnly || !onAnswer}
       startNumber={startNumber}
       numberFormat={numberFormat}
+      examType={examType}
       hideBlankNumbers={hideBlankNumbers}
       parenLetters={parenLetters}
+      hideWordCount={hideWordCount}
+      showWordCountToggle={showWordCountToggle}
+      onToggleWordCount={onToggleWordCount}
+      {...(engineOf(question.type) === "SPEAKING" ? {
+        autoFlow: speakingAutoFlow,
+        promptAudioReady: speakingPromptReady,
+        promptAudioInFeed: !hideTaskAudio,
+        onComplete: onSpeakingComplete,
+        examAudio,
+        media,
+      } : {})}
     />
+  );
+  const answerNode = hideAnswer || listeningContentGate ? null : hideSideKicker ? (
+    <>
+      <Text id={`q-${question.id}`} className="sr-only">{kickerLabel}</Text>
+      {sharedPassage && examType !== "TOEFL" && instructionHasContent(question.promptContent) && !docIsOnlyTable(question.promptContent)
+        ? <Box style={passageFrameStyle}>{player}</Box>
+        : player}
+    </>
+  ) : hasPromptText ? (
+    <Box
+      style={{
+        display: "flex",
+        gap: "0.5rem",
+        alignItems: "baseline",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          flex: "none",
+          whiteSpace: "nowrap",
+          fontSize: "inherit",
+          lineHeight: "inherit",
+          fontWeight: 700,
+          visibility: "hidden",
+          pointerEvents: "none",
+        }}
+      >
+        {kickerLabel}
+      </span>
+      <Box style={{ flex: 1, minWidth: 0 }}>{player}</Box>
+    </Box>
+  ) : (
+    <Box
+      style={{
+        display: "flex",
+        gap: "0.5rem",
+        alignItems: "baseline",
+      }}
+    >
+      {kickerNode}
+      <Box style={{ flex: 1, minWidth: 0 }}>{player}</Box>
+    </Box>
+  );
+  const taskBody = (
+    <Stack gap="calc(var(--mantine-spacing-md) / 2)">
+      {contentFeed(gatedBodyItems)}
+      {answerNode}
+    </Stack>
   );
   return (
     <Stack
@@ -95,89 +237,37 @@ export function QuestionPlayer({
       className="iba-test-copy"
       style={{ fontWeight: 500, fontSize: "var(--type-body, 1rem)" }}
     >
-      {questionsHeading && !headingBelowInstructions ? (
+      {questionsHeading && !teacherReview && !headingBelowInstructions ? (
         <Text fw={700} style={{ fontSize: "inherit", lineHeight: "inherit" }}>
           {questionsHeading}
         </Text>
       ) : null}
-      {instructionHasContent(instructions) ? (
+      {!hideInstructions && instructionHasContent(instructions) ? (
         <Box>
           <PromptView doc={instructions} />
         </Box>
       ) : null}
-      {questionsHeading && headingBelowInstructions ? (
+      {questionsHeading && !teacherReview && headingBelowInstructions ? (
         <Text fw={700} style={{ fontSize: "inherit", lineHeight: "inherit" }}>
           ({questionsHeading})
         </Text>
       ) : null}
-      <ContentFeedView
-        items={items}
-        promptId={promptItemId(items)}
-        renderPrompt={() => (hasPromptText ? (
-          hideSideKicker ? (
-            <PromptView doc={question.promptContent} />
-          ) : (
-            <Box
-              className="question-prompt-row"
-              style={{
-                display: "flex",
-                gap: "0.5rem",
-                alignItems: "baseline",
-              }}
-            >
-              {kickerNode}
-              <Box style={{ flex: 1, minWidth: 0 }}>
-                <PromptView doc={question.promptContent} />
-              </Box>
-            </Box>
-          )
-        ) : null)}
-        playbackLimit={question.settings.playbackLimit ?? 0}
-        playbackKey={media.playbackScope ? `iba-plays:${media.playbackScope}:${question.id}` : undefined}
-        examAudio={examAudio}
-      />
-      {hideAnswer ? null : hideSideKicker ? (
-        <>
-          <Text id={`q-${question.id}`} className="sr-only">{kickerLabel}</Text>
-          {sharedPassage && instructionHasContent(question.promptContent) && !docIsOnlyTable(question.promptContent)
-            ? <Box style={passageFrameStyle}>{player}</Box>
-            : player}
-        </>
-      ) : hasPromptText ? (
+      {toeflVisualSplit ? (
         <Box
+          className="runner-question-split"
           style={{
-            display: "flex",
-            gap: "0.5rem",
-            alignItems: "baseline",
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+            gap: "var(--mantine-spacing-md)",
+            alignItems: "start",
+            width: "100%",
           }}
         >
-          <span
-            aria-hidden
-            style={{
-              flex: "none",
-              whiteSpace: "nowrap",
-              fontSize: "inherit",
-              lineHeight: "inherit",
-              fontWeight: 700,
-              visibility: "hidden",
-              pointerEvents: "none",
-            }}
-          >
-            {kickerLabel}
-          </span>
-          <Box style={{ flex: 1, minWidth: 0 }}>{player}</Box>
+          <Box>{contentFeed(visualTaskItems)}</Box>
+          {taskBody}
         </Box>
       ) : (
-        <Box
-          style={{
-            display: "flex",
-            gap: "0.5rem",
-            alignItems: "baseline",
-          }}
-        >
-          {kickerNode}
-          <Box style={{ flex: 1, minWidth: 0 }}>{player}</Box>
-        </Box>
+        taskBody
       )}
     </Stack>
   );

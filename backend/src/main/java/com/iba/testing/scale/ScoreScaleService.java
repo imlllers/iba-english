@@ -49,8 +49,30 @@ public class ScoreScaleService {
     @Transactional(readOnly = true)
     public JsonNode list(UUID ownerId) {
         return repository.findById(ownerId)
-                .map(row -> withTypes(withoutLinear(row.getScales())))
+                .map(row -> withTypes(withoutLinear(mergeMissingBuiltins(row.getScales()))))
                 .orElseGet(() -> builtin.deepCopy());
+    }
+
+    private JsonNode mergeMissingBuiltins(JsonNode scales) {
+        if (!scales.isArray()) {
+            return scales;
+        }
+        ArrayNode result = mapper.createArrayNode();
+        scales.forEach(result::add);
+        for (JsonNode starter : builtin) {
+            String id = starter.path("id").asText();
+            boolean found = false;
+            for (JsonNode scale : result) {
+                if (id.equals(scale.path("id").asText())) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                result.add(starter.deepCopy());
+            }
+        }
+        return result;
     }
 
     private static JsonNode withTypes(JsonNode scales) {
@@ -212,14 +234,14 @@ public class ScoreScaleService {
     }
 
     private static ObjectNode toefl(ObjectMapper mapper) {
-        ArrayNode table = identityTable(mapper, 30);
+        ArrayNode table = linearTable(mapper, 30, 1, 6, 0.5);
         ArrayNode sections = mapper.createArrayNode();
-        sections.add(section(mapper, "Reading", 0, 30, 1, tableConvert(mapper, 30, table)));
-        sections.add(section(mapper, "Listening", 0, 30, 1, tableConvert(mapper, 30, table.deepCopy())));
-        sections.add(section(mapper, "Speaking", 0, 30, 1, manual(mapper)));
-        sections.add(section(mapper, "Writing", 0, 30, 1, manual(mapper)));
-        return exam(mapper, "toefl", "TOEFL iBT", sections, "sum", null, levels(mapper,
-                "A2", 0, 41, "B1", 42, 64, "B2", 65, 94, "C1", 95, 114, "C2", 115, 120));
+        sections.add(section(mapper, "Reading", 1, 6, 0.5, tableConvert(mapper, 30, table)));
+        sections.add(section(mapper, "Listening", 1, 6, 0.5, tableConvert(mapper, 30, table.deepCopy())));
+        sections.add(section(mapper, "Writing", 1, 6, 0.5, manual(mapper)));
+        sections.add(section(mapper, "Speaking", 1, 6, 0.5, manual(mapper)));
+        return exam(mapper, "toefl", "TOEFL iBT (2026)", sections, "average", 0.5, levels(mapper,
+                "A1", 1, 1.5, "A2", 2, 2.5, "B1", 3, 3.5, "B2", 4, 4.5, "C1", 5, 5.5, "C2", 6, 6));
     }
 
     private static ObjectNode toeic(ObjectMapper mapper) {
@@ -228,7 +250,7 @@ public class ScoreScaleService {
         sections.add(section(mapper, "Listening", 5, 495, 5, tableConvert(mapper, 100, table)));
         sections.add(section(mapper, "Reading", 5, 495, 5, tableConvert(mapper, 100, table.deepCopy())));
         return exam(mapper, "toeic", "TOEIC", sections, "sum", null, levels(mapper,
-                "A1", 10, 220, "A2", 225, 545, "B1", 550, 725, "B2", 730, 865, "C1", 870, 940, "C2", 945, 990));
+                "A1", 120, 220, "A2", 225, 545, "B1", 550, 780, "B2", 785, 940, "C1", 945, 990));
     }
 
     private static ObjectNode exam(

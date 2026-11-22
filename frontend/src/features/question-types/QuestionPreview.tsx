@@ -1,6 +1,7 @@
 import { Box, Group, Image, Stack, Text } from "@mantine/core";
 import type { Question } from "@/entities/question/types";
 import { AppAudio } from "@/shared/ui/AppAudio";
+import { VideoPlayer } from "@/shared/ui/VideoPlayer";
 import { SettingsHint } from "@/shared/ui/SettingsHint";
 import { CONTENT_LABELS, promptItemId, questionItems } from "./content/contentItems";
 import { instructionHasContent, toInstructionDoc } from "./content/instructionDoc";
@@ -70,15 +71,9 @@ export function QuestionPreview({ question, startNumber = 1 }: QuestionPreviewPr
                   <AppAudio src={media.asset(item.mediaId)} maw={360} style={{ flex: 1, minWidth: 0 }} aria-label="Аудиозапись" />
                 )}
                 {item.kind === "video" && (
-                  <Box
-                    component="video"
-                    src={media.asset(item.mediaId)}
-                    controls
-                    preload="metadata"
-                    w={160}
-                    h={64}
-                    style={{ display: "block", objectFit: "cover", borderRadius: "var(--mantine-radius-md)", background: "var(--mantine-color-dark-9)" }}
-                  />
+                  <Box style={{ flex: 1, minWidth: 0, maxWidth: 480 }}>
+                    <VideoPlayer src={media.asset(item.mediaId)} aria-label="Видео" />
+                  </Box>
                 )}
               </Group>
             ) : (

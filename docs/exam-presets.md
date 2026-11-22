@@ -8,31 +8,33 @@
 
 - Части: L Part 1-4, R Passage 1-3, W Task 1-2, S Part 1-3.
 - Нумерация по секции; страница = вся часть.
-- Назад по вопросам и частям – да; по секциям – нет.
+- Назад по вопросам и частям – да (кроме Speaking); по секциям – нет.
 - Время: Listening 30, Reading 60, Writing 60, Speaking 14 мин.
-- Аудио без автостарта; результат: балл + разбор; focus loss = 2; досрочная сдача разрешена.
+- Speaking можно удалить из теста, итог тогда считается по оставшимся секциям.
+- Аудио с автостартом; состав результата – итоговый балл и баллы по секциям; контроль выхода из окна теста – 2 предупреждения; досрочная сдача разрешена.
 
-## TOEFL (фиксированный набор 2026)
+## TOEFL iBT (2026)
 
 Секции: Reading → Listening → Writing → Speaking.
 
-- Reading: 3 части (Vocabulary & Short Texts / Daily Life / Academic).
-- Listening, Writing, Speaking – без частей (задания линейно).
-- Нумерация по секции; одно задание на страницу.
-- Назад везде запрещён; досрочная сдача скрыта (кнопка Finish только в конце).
-- Время секций: R 30, L 29, W 23, S 8 мин.
+- Reading: Module 1 и Module 2.
+- Listening и Speaking – без частей; в Speaking задания идут автоматически.
+- Writing: Build a Sentence, Write an Email, Academic Discussion.
+- Нумерация по частям; одно задание на страницу.
+- Назад только в Reading (внутри секции); Listening / Writing / Speaking – нельзя; досрочная сдача скрыта (кнопка Finish только в конце).
+- Время в шаблоне не задано: преподаватель ставит его во вкладке «Время».
 - Аудио с автостартом; по нулю таймера задания – автопереход вперёд.
-- Результат: только балл; focus loss = 2.
+- Состав результата – итоговый балл и баллы по секциям; контроль выхода из окна теста выключен.
 
 ## TOEIC
 
-Секции: Listening → Reading → Writing → Speaking.
+Секции: Listening → Reading → Speaking → Writing.
 
-- Listening Part 1-4, Reading Part 5-7; Writing и Speaking без частей (преподаватель добавляет Written ×8 и Speaking ×11).
+- Listening Part 1-4, Reading Part 5-7; Speaking и Writing без частей (преподаватель добавляет Speaking ×11 и Written ×8).
 - Нумерация по всему тесту.
-- Назад по вопросам и частям – да; по секциям – нет.
-- **Блок-таймер 120 мин** на Listening+Reading (`timeLimitMinutes` + `timeLimitSectionTypes`); Writing 60; Speaking 20.
-- Аудио без автостарта; результат: балл + разбор; focus loss = 2.
+- Назад: Reading – да; Listening / Speaking / Writing – нет; по секциям – нет.
+- Время: Listening 45, Reading 75, Speaking 20, Writing 60 мин.
+- Аудио с автостартом; состав результата – итоговый балл; контроль выхода из окна теста – 2 предупреждения.
 
 ## Источники (ориентиры)
 

@@ -45,6 +45,21 @@ export function formatClock(totalSeconds: number) {
   return hours > 0 ? `${hours}:${tail}` : tail;
 }
 
+export function formatVideoTime(totalSeconds: number) {
+  if (!Number.isFinite(totalSeconds)) {
+    return "0:00";
+  }
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+  const sec = String(seconds).padStart(2, "0");
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${sec}`;
+  }
+  return `${minutes}:${sec}`;
+}
+
 const pluralRules = new Intl.PluralRules("ru-RU");
 
 export function plural(count: number, one: string, few: string, many: string) {

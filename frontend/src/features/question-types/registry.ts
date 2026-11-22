@@ -38,7 +38,7 @@ const TYPE_ALIASES: Record<string, QuestionType> = {
 
 export const TYPE_META: Record<QuestionType, TypeMeta> = {
   SINGLE_CHOICE: { label: "Один вариант ответа", group: "choice", engine: "CHOICE", hint: "Участник выбирает один верный пункт из списка" },
-  MULTIPLE_SELECT: { label: "Несколько вариантов ответа", group: "choice", engine: "MULTI_CHOICE", hint: "Несколько верных пунктов; в IELTS каждый даёт свой номер вопроса" },
+  MULTIPLE_SELECT: { label: "Несколько вариантов ответа", group: "choice", engine: "MULTI_CHOICE", hint: "Несколько верных пунктов; каждый верный может получить отдельный номер в нумерации" },
   TRUE_FALSE: { label: "True / False", group: "choice", engine: "JUDGEMENT", hint: "По каждому утверждению: верно или неверно" },
   YES_NO: { label: "Yes / No", group: "choice", engine: "JUDGEMENT", hint: "По каждому утверждению: да или нет" },
   TRUE_FALSE_NOT_GIVEN: { label: "True / False / Not Given", group: "choice", engine: "JUDGEMENT", hint: "По каждому утверждению: верно, неверно или в тексте нет информации" },

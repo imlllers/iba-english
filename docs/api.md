@@ -57,14 +57,22 @@
 - `POST /api/public/tests/{publicToken}/attempts`
 - `GET /api/public/attempts/{attemptToken}` – продолжить попытку; 409, если она уже отправлена
 - `PUT /api/public/attempts/{attemptToken}/answers/{questionId}`
+- `POST /api/public/attempts/{attemptToken}/answers/{questionId}/check`
 - `POST /api/public/attempts/{attemptToken}/sections/{sectionId}/start` – запуск таймера секции
+- `POST /api/public/attempts/{attemptToken}/parts/{partId}/start` – запуск таймера части
+- `POST /api/public/attempts/{attemptToken}/parts/{partId}/pause` – пауза таймера части на время аудио
+- `POST /api/public/attempts/{attemptToken}/parts/{partId}/resume`
+- `POST /api/public/attempts/{attemptToken}/questions/{questionId}/start` – запуск таймера вопроса
+- `POST /api/public/attempts/{attemptToken}/questions/{questionId}/reading-start`
+- `POST /api/public/attempts/{attemptToken}/questions/{questionId}/reading-done`
+- `POST /api/public/attempts/{attemptToken}/audio-done`
 - `POST /api/public/attempts/{attemptToken}/submit` – повторная отправка не пересчитывает попытку
 - `GET /api/public/attempts/{attemptToken}/result`
 - `GET /api/public/tests/{publicToken}/media/{mediaId}`
 - `POST /api/public/attempts/{attemptToken}/media`, `GET /api/public/attempts/{attemptToken}/media/{mediaId}` – запись голоса
 
-Коды ошибок прохождения: `NAME_REQUIRED`, `NOT_OPEN`, `CLOSED`, `TIME_EXPIRED`, `SECTION_EXPIRED`, `ALREADY_SUBMITTED`.
+Коды ошибок прохождения: `NAME_REQUIRED`, `NOT_OPEN`, `CLOSED`, `TIME_EXPIRED`, `SECTION_EXPIRED`, `PART_EXPIRED`, `QUESTION_EXPIRED`, `ALREADY_SUBMITTED`.
 
-Публичные ответы не содержат `answerKey`. Время теста и секций проверяет сервер.
+Публичные ответы не содержат `answerKey`. Сервер проверяет время теста, секций, частей и вопросов.
 
 `GET /api/health` – проверка состояния для Docker.

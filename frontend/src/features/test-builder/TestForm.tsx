@@ -1,4 +1,4 @@
-import { Stack, TextInput } from "@mantine/core";
+import { Group, Stack, TextInput } from "@mantine/core";
 import { useEffect, useRef, useState } from "react";
 import { EXAM_TYPE_OPTIONS } from "@/entities/test/settings";
 import type { ExamDisplayType, ExamTest, TestSettings } from "@/entities/test/types";
@@ -7,8 +7,8 @@ import { InstructionsField } from "@/features/question-types/widgets/Instruction
 import type { TestMetaInput } from "@/features/tests/testsApi";
 import { Select } from "@/shared/ui/Select";
 import { SettingsCard } from "@/shared/ui/SettingsCard";
-import { SettingsHint } from "@/shared/ui/SettingsHint";
 import { SettingsSectionTitle } from "@/shared/ui/SettingsSectionTitle";
+import { ScaleBindingField, type ScaleTarget } from "@/features/score-scales/ScaleBindingCard";
 import { TestSettingsCards } from "./TestSettingsCards";
 
 type TestFormProps = {
@@ -29,19 +29,34 @@ export function TestForm({ test, onChange }: TestFormProps) {
   const settings = (patch: Partial<TestSettings>, delay = 0) =>
     onChange({ settings: { ...test.settings, ...patch } }, delay);
 
+  const scaleTargets: ScaleTarget[] = test.sections.map((section) => ({
+    key: section.id,
+    title: section.title,
+    sectionType: section.sectionType,
+    binding: { sectionId: section.id },
+  }));
+
   return (
     <Stack gap="sm">
       <SettingsCard>
         <Stack gap="md">
           <SettingsSectionTitle>О тесте</SettingsSectionTitle>
-          <Select
-            label="Тип теста"
-            withAsterisk
-            value={test.settings.examType ?? "CUSTOM"}
-            options={EXAM_TYPE_OPTIONS}
-            onChange={(value) => settings({ examType: (value as ExamDisplayType) || "CUSTOM" })}
-          />
-          <SettingsHint>Влияет только на оформление прохождения, структуру секций не меняет</SettingsHint>
+          <Group gap="md" wrap="nowrap" align="flex-start" grow>
+            <Select
+              label="Тип теста"
+              withAsterisk
+              value={test.settings.examType ?? "CUSTOM"}
+              options={EXAM_TYPE_OPTIONS}
+              onChange={(value) => settings({ examType: (value as ExamDisplayType) || "CUSTOM" })}
+            />
+            <ScaleBindingField
+              value={test.settings.scoreScale}
+              examType={test.settings.examType}
+              examPreset={test.examPreset}
+              targets={scaleTargets}
+              onChange={(scoreScale) => settings({ scoreScale })}
+            />
+          </Group>
           <TextInput
             ref={titleRef}
             label="Название"
@@ -56,7 +71,7 @@ export function TestForm({ test, onChange }: TestFormProps) {
             }}
           />
           <InstructionsField
-            label="Описание для участника"
+            label="Описание для студента"
             value={test.description}
             toolbar="inline"
             blankTools={false}
@@ -65,16 +80,7 @@ export function TestForm({ test, onChange }: TestFormProps) {
         </Stack>
       </SettingsCard>
 
-      <TestSettingsCards
-        settings={test.settings}
-        onChange={(patch) => settings(patch)}
-        scaleTargets={test.sections.map((section) => ({
-          key: section.id,
-          title: section.title,
-          sectionType: section.sectionType,
-          binding: { sectionId: section.id },
-        }))}
-      />
+      <TestSettingsCards settings={test.settings} onChange={(patch) => settings(patch)} />
     </Stack>
   );
 }

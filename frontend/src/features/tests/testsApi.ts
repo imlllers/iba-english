@@ -18,6 +18,7 @@ export type SectionInput = {
   instructions: string;
   sectionType: SectionType;
   timeLimitMinutes: number | null;
+  timeLimitSeconds?: number | null;
   allowBackToQuestions?: boolean | null;
   allowBackToPart?: boolean | null;
   items?: ContentItem[];
@@ -26,6 +27,7 @@ export type PartInput = {
   title: string;
   instructions: string;
   timeLimitMinutes?: number | null;
+  timeLimitSeconds?: number | null;
   oneQuestionPerPage?: boolean | null;
   items?: ContentItem[];
 };

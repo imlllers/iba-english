@@ -1,8 +1,9 @@
-import { ActionIcon, Box, Button, Group, Stack, Text, Tooltip } from "@mantine/core";
+import { Box, Button, Group, Stack, Text } from "@mantine/core";
 import type { ReactNode } from "react";
 import type { ExamTest } from "@/entities/test/types";
 import { FormatToolbarHost } from "@/features/question-types/prompt/RichTextEditor";
 import { Icon } from "@/shared/ui/Icon";
+import { IconButton } from "@/shared/ui/IconButton";
 
 export type BuilderWorkspace = "builder" | "settings";
 
@@ -64,11 +65,9 @@ export function BuilderBar({
         style={{ position: "relative", zIndex: 2, pointerEvents: "none" }}
       >
         <Group gap="md" wrap="nowrap" style={{ flex: "none", pointerEvents: "auto" }}>
-          <Tooltip label="Демо-версия">
-            <ActionIcon size="lg" aria-label="Демо-версия" onClick={onPreview}>
-              <Icon name="eye" />
-            </ActionIcon>
-          </Tooltip>
+          <IconButton size="lg" label="Демо-версия" onClick={onPreview}>
+            <Icon name="eye" size={20} />
+          </IconButton>
           <Button
             loading={publishing}
             onClick={onPublish}

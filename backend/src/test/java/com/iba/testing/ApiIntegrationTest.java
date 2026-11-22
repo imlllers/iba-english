@@ -147,7 +147,7 @@ class ApiIntegrationTest {
         JsonNode first = read(mvc.perform(post("/api/public/attempts/" + attemptToken + "/submit").with(csrf()))
                 .andExpect(status().isOk()).andReturn());
         assertEquals("NEEDS_REVIEW", first.path("status").asText());
-        assertFalse(first.path("scoreVisible").asBoolean());
+        assertTrue(first.path("scoreVisible").asBoolean());
         JsonNode second = read(mvc.perform(post("/api/public/attempts/" + attemptToken + "/submit").with(csrf()))
                 .andExpect(status().isOk()).andReturn());
         assertEquals("NEEDS_REVIEW", second.path("status").asText());
@@ -200,6 +200,221 @@ class ApiIntegrationTest {
         mvc.perform(json(post("/api/teacher/tests/" + test.path("id").asText() + "/sections/"
                         + test.path("sections").get(0).path("id").asText() + "/questions"), teacher, "{\"type\":\"DRAGON\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void sectionAndPartSecondsClearOnZeroAndNull() throws Exception {
+        JsonNode test = createTest(teacher);
+        String id = test.path("id").asText();
+        JsonNode section = test.path("sections").get(0);
+        String sectionId = section.path("id").asText();
+
+        ObjectNode sectionBody = mapper.createObjectNode()
+                .put("title", section.path("title").asText())
+                .put("instructions", "")
+                .put("sectionType", section.path("sectionType").asText("CUSTOM"))
+                .put("timeLimitMinutes", 0)
+                .put("timeLimitSeconds", 390);
+        JsonNode withSeconds = read(mvc.perform(json(put("/api/teacher/tests/" + id + "/sections/" + sectionId), teacher, sectionBody.toString()))
+                .andExpect(status().isOk()).andReturn());
+        assertEquals(390, withSeconds.path("sections").get(0).path("timeLimitSeconds").asInt());
+
+        sectionBody.put("timeLimitSeconds", 0);
+        JsonNode cleared = read(mvc.perform(json(put("/api/teacher/tests/" + id + "/sections/" + sectionId), teacher, sectionBody.toString()))
+                .andExpect(status().isOk()).andReturn());
+        assertTrue(cleared.path("sections").get(0).path("timeLimitSeconds").isNull());
+        assertTrue(cleared.path("sections").get(0).path("timeLimitMinutes").isNull());
+
+        sectionBody.put("timeLimitSeconds", 390);
+        mvc.perform(json(put("/api/teacher/tests/" + id + "/sections/" + sectionId), teacher, sectionBody.toString()))
+                .andExpect(status().isOk());
+        sectionBody.putNull("timeLimitSeconds");
+        sectionBody.put("timeLimitMinutes", 0);
+        JsonNode clearedByNull = read(mvc.perform(json(put("/api/teacher/tests/" + id + "/sections/" + sectionId), teacher, sectionBody.toString()))
+                .andExpect(status().isOk()).andReturn());
+        assertTrue(clearedByNull.path("sections").get(0).path("timeLimitSeconds").isNull());
+        assertTrue(clearedByNull.path("sections").get(0).path("timeLimitMinutes").isNull());
+
+        JsonNode withPart = read(mvc.perform(json(post("/api/teacher/tests/" + id + "/sections/" + sectionId + "/parts"), teacher, "{}"))
+                .andExpect(status().isOk()).andReturn());
+        JsonNode part = withPart.path("sections").get(0).path("parts").get(0);
+        String partId = part.path("id").asText();
+        ObjectNode partBody = mapper.createObjectNode()
+                .put("title", part.path("title").asText("Part 1"))
+                .put("instructions", "")
+                .put("timeLimitMinutes", 0)
+                .put("timeLimitSeconds", 390);
+        JsonNode partTimed = read(mvc.perform(json(
+                        put("/api/teacher/tests/" + id + "/sections/" + sectionId + "/parts/" + partId), teacher, partBody.toString()))
+                .andExpect(status().isOk()).andReturn());
+        assertEquals(390, partTimed.path("sections").get(0).path("parts").get(0).path("timeLimitSeconds").asInt());
+
+        partBody.put("timeLimitSeconds", 0);
+        JsonNode partCleared = read(mvc.perform(json(
+                        put("/api/teacher/tests/" + id + "/sections/" + sectionId + "/parts/" + partId), teacher, partBody.toString()))
+                .andExpect(status().isOk()).andReturn());
+        assertTrue(partCleared.path("sections").get(0).path("parts").get(0).path("timeLimitSeconds").isNull());
+        assertTrue(partCleared.path("sections").get(0).path("parts").get(0).path("timeLimitMinutes").isNull());
+    }
+
+    @Test
+    void templateAndDuplicateKeepSectionAndPartSeconds() throws Exception {
+        ObjectNode templateBody = mapper.createObjectNode();
+        templateBody.put("title", "Seconds template");
+        ObjectNode settings = templateBody.putObject("defaultSettings");
+        settings.put("examType", "TOEFL");
+        ObjectNode section = templateBody.putArray("sections").addObject();
+        section.put("title", "Listening");
+        section.put("sectionType", "LISTENING");
+        section.put("instructions", "");
+        section.put("timeLimitSeconds", 390);
+        ObjectNode part = section.putArray("parts").addObject();
+        part.put("title", "Part 1");
+        part.put("timeLimitSeconds", 390);
+        JsonNode template = read(mvc.perform(json(post("/api/teacher/templates"), teacher, templateBody.toString()))
+                .andExpect(status().isOk()).andReturn());
+
+        ObjectNode createBody = mapper.createObjectNode()
+                .put("title", "From template")
+                .put("description", "")
+                .put("templateId", template.path("id").asText());
+        JsonNode created = read(mvc.perform(json(post("/api/teacher/tests"), teacher, createBody.toString()))
+                .andExpect(status().isOk()).andReturn());
+        JsonNode createdSection = created.path("sections").get(0);
+        assertEquals(390, createdSection.path("timeLimitSeconds").asInt());
+        assertEquals(390, createdSection.path("parts").get(0).path("timeLimitSeconds").asInt());
+
+        JsonNode copy = read(mvc.perform(json(post("/api/teacher/tests/" + created.path("id").asText() + "/duplicate"), teacher, "{}"))
+                .andExpect(status().isOk()).andReturn());
+        JsonNode copySection = copy.path("sections").get(0);
+        assertEquals(390, copySection.path("timeLimitSeconds").asInt());
+        assertEquals(390, copySection.path("parts").get(0).path("timeLimitSeconds").asInt());
+    }
+
+    @Test
+    void timeOnlyUpdateKeepsSectionAndPartNavSettings() throws Exception {
+        JsonNode test = createTest(teacher);
+        String id = test.path("id").asText();
+        JsonNode section = test.path("sections").get(0);
+        String sectionId = section.path("id").asText();
+
+        ObjectNode navBody = mapper.createObjectNode()
+                .put("title", section.path("title").asText())
+                .put("instructions", "")
+                .put("sectionType", section.path("sectionType").asText("CUSTOM"))
+                .put("allowBackToQuestions", false)
+                .put("allowBackToPart", false);
+        read(mvc.perform(json(put("/api/teacher/tests/" + id + "/sections/" + sectionId), teacher, navBody.toString()))
+                .andExpect(status().isOk()).andReturn());
+
+        JsonNode withPart = read(mvc.perform(json(post("/api/teacher/tests/" + id + "/sections/" + sectionId + "/parts"), teacher, "{}"))
+                .andExpect(status().isOk()).andReturn());
+        String partId = withPart.path("sections").get(0).path("parts").get(0).path("id").asText();
+
+        ObjectNode partNav = mapper.createObjectNode()
+                .put("title", "Part 1")
+                .put("instructions", "")
+                .put("oneQuestionPerPage", true);
+        read(mvc.perform(json(
+                        put("/api/teacher/tests/" + id + "/sections/" + sectionId + "/parts/" + partId), teacher, partNav.toString()))
+                .andExpect(status().isOk()).andReturn());
+
+        ObjectNode timeOnlySection = mapper.createObjectNode()
+                .put("title", section.path("title").asText())
+                .put("instructions", "")
+                .put("sectionType", section.path("sectionType").asText("CUSTOM"))
+                .put("timeLimitMinutes", 0)
+                .put("timeLimitSeconds", 390);
+        JsonNode afterSectionTime = read(mvc.perform(json(
+                        put("/api/teacher/tests/" + id + "/sections/" + sectionId), teacher, timeOnlySection.toString()))
+                .andExpect(status().isOk()).andReturn());
+        assertEquals(390, afterSectionTime.path("sections").get(0).path("timeLimitSeconds").asInt());
+        assertFalse(afterSectionTime.path("sections").get(0).path("allowBackToQuestions").asBoolean(true));
+        assertFalse(afterSectionTime.path("sections").get(0).path("allowBackToPart").asBoolean(true));
+
+        ObjectNode timeOnlyPart = mapper.createObjectNode()
+                .put("title", "Part 1")
+                .put("instructions", "")
+                .put("timeLimitMinutes", 0)
+                .put("timeLimitSeconds", 180);
+        JsonNode afterPartTime = read(mvc.perform(json(
+                        put("/api/teacher/tests/" + id + "/sections/" + sectionId + "/parts/" + partId), teacher, timeOnlyPart.toString()))
+                .andExpect(status().isOk()).andReturn());
+        assertEquals(180, afterPartTime.path("sections").get(0).path("parts").get(0).path("timeLimitSeconds").asInt());
+        assertTrue(afterPartTime.path("sections").get(0).path("parts").get(0).path("oneQuestionPerPage").asBoolean(false));
+
+        navBody.put("allowBackToQuestions", true);
+        JsonNode sectionNavChanged = read(mvc.perform(json(
+                        put("/api/teacher/tests/" + id + "/sections/" + sectionId), teacher, navBody.toString()))
+                .andExpect(status().isOk()).andReturn());
+        assertTrue(sectionNavChanged.path("sections").get(0).path("allowBackToQuestions").asBoolean(false));
+
+        partNav.put("oneQuestionPerPage", false);
+        JsonNode partNavChanged = read(mvc.perform(json(
+                        put("/api/teacher/tests/" + id + "/sections/" + sectionId + "/parts/" + partId), teacher, partNav.toString()))
+                .andExpect(status().isOk()).andReturn());
+        assertFalse(partNavChanged.path("sections").get(0).path("parts").get(0).path("oneQuestionPerPage").asBoolean(true));
+    }
+
+    @Test
+    void partialUpdatePreservesTimeUntilZeroSent() throws Exception {
+        JsonNode test = createTest(teacher);
+        String id = test.path("id").asText();
+        JsonNode section = test.path("sections").get(0);
+        String sectionId = section.path("id").asText();
+
+        ObjectNode timedSection = mapper.createObjectNode()
+                .put("title", section.path("title").asText())
+                .put("instructions", "")
+                .put("sectionType", section.path("sectionType").asText("CUSTOM"))
+                .put("timeLimitMinutes", 0)
+                .put("timeLimitSeconds", 390);
+        read(mvc.perform(json(put("/api/teacher/tests/" + id + "/sections/" + sectionId), teacher, timedSection.toString()))
+                .andExpect(status().isOk()).andReturn());
+
+        JsonNode withPart = read(mvc.perform(json(post("/api/teacher/tests/" + id + "/sections/" + sectionId + "/parts"), teacher, "{}"))
+                .andExpect(status().isOk()).andReturn());
+        String partId = withPart.path("sections").get(0).path("parts").get(0).path("id").asText();
+
+        ObjectNode timedPart = mapper.createObjectNode()
+                .put("title", "Part 1")
+                .put("instructions", "")
+                .put("timeLimitMinutes", 0)
+                .put("timeLimitSeconds", 180);
+        read(mvc.perform(json(
+                        put("/api/teacher/tests/" + id + "/sections/" + sectionId + "/parts/" + partId), teacher, timedPart.toString()))
+                .andExpect(status().isOk()).andReturn());
+
+        ObjectNode navOnlySection = mapper.createObjectNode()
+                .put("title", section.path("title").asText())
+                .put("instructions", "")
+                .put("sectionType", section.path("sectionType").asText("CUSTOM"))
+                .put("allowBackToQuestions", false);
+        JsonNode afterNav = read(mvc.perform(json(
+                        put("/api/teacher/tests/" + id + "/sections/" + sectionId), teacher, navOnlySection.toString()))
+                .andExpect(status().isOk()).andReturn());
+        assertEquals(390, afterNav.path("sections").get(0).path("timeLimitSeconds").asInt());
+
+        ObjectNode navOnlyPart = mapper.createObjectNode()
+                .put("title", "Part 1")
+                .put("instructions", "")
+                .put("oneQuestionPerPage", true);
+        JsonNode afterPartNav = read(mvc.perform(json(
+                        put("/api/teacher/tests/" + id + "/sections/" + sectionId + "/parts/" + partId), teacher, navOnlyPart.toString()))
+                .andExpect(status().isOk()).andReturn());
+        assertEquals(180, afterPartNav.path("sections").get(0).path("parts").get(0).path("timeLimitSeconds").asInt());
+
+        timedSection.put("timeLimitSeconds", 0);
+        JsonNode clearedSection = read(mvc.perform(json(
+                        put("/api/teacher/tests/" + id + "/sections/" + sectionId), teacher, timedSection.toString()))
+                .andExpect(status().isOk()).andReturn());
+        assertTrue(clearedSection.path("sections").get(0).path("timeLimitSeconds").isNull());
+
+        timedPart.put("timeLimitSeconds", 0);
+        JsonNode clearedPart = read(mvc.perform(json(
+                        put("/api/teacher/tests/" + id + "/sections/" + sectionId + "/parts/" + partId), teacher, timedPart.toString()))
+                .andExpect(status().isOk()).andReturn());
+        assertTrue(clearedPart.path("sections").get(0).path("parts").get(0).path("timeLimitSeconds").isNull());
     }
 
     @Test

@@ -2,6 +2,7 @@ import { Alert, Box, Group, Modal, SegmentedControl, Stack, Table, Text } from "
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import type { AttemptDetail } from "@/entities/attempt/types";
+import type { ExamDisplayType } from "@/entities/test/types";
 import { MediaProvider, type MediaResolver } from "@/features/question-types/media/MediaContext";
 import { teacherMediaUrl } from "@/features/media-library/mediaApi";
 import { questionSlotCount } from "@/features/question-types/numbering";
@@ -9,11 +10,12 @@ import { ManualScore } from "@/features/score-scales/ScaleResultView";
 import { formatNumber } from "@/features/score-scales/scoreScale";
 import { errorMessage } from "@/shared/api/client";
 import { formatScore } from "@/shared/lib/format";
+import { EmptyState } from "@/shared/ui/EmptyState";
 import { Loading } from "@/shared/ui/Loading";
 import { SettingsHint } from "@/shared/ui/SettingsHint";
 import { SettingsSectionTitle } from "@/shared/ui/SettingsSectionTitle";
 import { StatusBadge } from "@/shared/ui/StatusBadge";
-import { AnswerReview, SectionSheet, sectionGroups, type NumberedAnswer } from "./AnswerReview";
+import { AnswerReview, SectionSheet, isReviewCard, sectionGroups, type NumberedAnswer } from "./AnswerReview";
 import { recordingUrl, resultsApi } from "./resultsApi";
 
 function SummaryTable({ attempt, sections, onManual }: {
@@ -73,8 +75,31 @@ function SummaryTable({ attempt, sections, onManual }: {
   );
 }
 
+type AnswerFilter = "review" | "all" | "errors";
+
+function sectionScore(items: NumberedAnswer[]) {
+  return formatScore(
+    items.reduce((sum, { answer }) => sum + (answer.awardedScore ?? 0), 0),
+    items.reduce((sum, { answer }) => sum + (answer.maxScore ?? 0), 0),
+  );
+}
+
+function reviewExamType(attempt: AttemptDetail): ExamDisplayType {
+  if (attempt.examType) {
+    return attempt.examType;
+  }
+  const title = attempt.scaleResult?.title?.toUpperCase() ?? "";
+  if (title.includes("TOEFL")) {
+    return "TOEFL";
+  }
+  return "CUSTOM";
+}
+
 function AttemptBody({ attempt, onSaved }: { attempt: AttemptDetail; onSaved: (next: AttemptDetail) => void }) {
-  const [filter, setFilter] = useState<"all" | "errors">("all");
+  const examType = reviewExamType(attempt);
+  const [filter, setFilter] = useState<AnswerFilter>(() => (
+    attempt.answers.some((answer) => answer.needsReview) ? "review" : "all"
+  ));
   const scaleScore = useMutation({
     mutationFn: ({ index, score }: { index: number; score: number | null }) => resultsApi.scaleScore(attempt.id, index, score),
     onSuccess: onSaved,
@@ -87,54 +112,115 @@ function AttemptBody({ attempt, onSaved }: { attempt: AttemptDetail; onSaved: (n
     return { answer, start, count };
   });
   const toReview = numbered.filter(({ answer }) => answer.needsReview);
-  const sections = sectionGroups(numbered.filter(({ answer }) => !answer.needsReview));
+  const reviewCards = numbered.filter(isReviewCard);
+  const sections = sectionGroups(numbered);
   const marks = attempt.answers.flatMap((answer) => Object.values(answer.marks ?? {}));
   const wrong = marks.filter((mark) => mark !== "correct").length;
+  const showAnswers = numbered.length > 0;
+  const modes: { value: AnswerFilter; label: string }[] = [
+    ...(reviewCards.length > 0
+      ? [{ value: "review" as const, label: toReview.length > 0 ? `Проверить (${toReview.length})` : "Проверить" }]
+      : []),
+    { value: "all", label: "Таблица ответов" },
+    ...(marks.length > 0 ? [{ value: "errors" as const, label: `Ошибки (${wrong})` }] : []),
+  ];
 
   return (
     <Stack gap="md">
       <SettingsSectionTitle>Итоги</SettingsSectionTitle>
       <SummaryTable
         attempt={attempt}
-        sections={sectionGroups(numbered)}
+        sections={sections}
         onManual={(index, score) => scaleScore.mutate({ index, score })}
       />
       {scaleScore.isError && (
         <Alert color="red" variant="light" role="alert">{errorMessage(scaleScore.error, "Не удалось сохранить балл")}</Alert>
       )}
       {attempt.answers.length === 0 && <SettingsHint>Участник не ответил ни на одно задание</SettingsHint>}
-      {toReview.length > 0 && (
+      {showAnswers && (
         <>
-          <Box mt="sm"><SettingsSectionTitle>Нужно проверить ({toReview.length})</SettingsSectionTitle></Box>
-          {toReview.map((item) => (
-            <AnswerReview key={item.answer.questionId} attemptId={attempt.id} item={item} onSaved={onSaved} />
-          ))}
-        </>
-      )}
-      {sections.length > 0 && (
-        <>
-          <Group justify="space-between" align="center" gap="md" mt="sm">
+          <Group justify="space-between" align="center" gap="md" wrap="wrap" mt="sm">
             <SettingsSectionTitle>Ответы</SettingsSectionTitle>
-            {marks.length > 0 && (
+            {modes.length > 1 && (
               <SegmentedControl
                 size="sm"
                 value={filter}
-                onChange={(value) => setFilter(value as "all" | "errors")}
-                data={[
-                  { value: "all", label: "Все" },
-                  { value: "errors", label: `Ошибки (${wrong})` },
-                ]}
+                onChange={(value) => setFilter(value as AnswerFilter)}
+                data={modes}
               />
             )}
           </Group>
-          {sections.map((section) => (
-            <SectionSheet
-              key={section.title + section.items[0].answer.questionId}
-              title={section.title}
-              items={section.items}
-              errorsOnly={filter === "errors"}
-            />
-          ))}
+          <Box
+            style={
+              filter === "review"
+                ? {
+                  height: "var(--attempt-review-panel-height)",
+                  minHeight: "var(--attempt-review-panel-height)",
+                  overflowY: "auto",
+                  display: "flex",
+                  flexDirection: "column",
+                }
+                : undefined
+            }
+          >
+            {filter === "review" && toReview.length === 0 && reviewCards.length > 0 ? (
+              <Box style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", width: "100%" }}>
+                <EmptyState title="Проверка завершена">
+                  Все задания с ручной оценкой проверены
+                </EmptyState>
+              </Box>
+            ) : filter === "review" ? (
+              <Stack gap="md">
+                {sections.map((section) => {
+                  const pending = section.items.filter(isReviewCard).filter((item) => item.answer.needsReview);
+                  if (pending.length === 0) {
+                    return null;
+                  }
+                  const key = section.title + section.items[0]?.answer.questionId;
+                  return (
+                    <Stack key={key} gap="sm">
+                      <Group justify="space-between" gap="md" wrap="nowrap">
+                        <Text fw={700} size="lg">{section.title}</Text>
+                        <Text fw={700}>{sectionScore(section.items)}</Text>
+                      </Group>
+                      {pending.map((item) => (
+                        <AnswerReview
+                          key={item.answer.questionId}
+                          attemptId={attempt.id}
+                          item={item}
+                          examType={examType}
+                          onSaved={onSaved}
+                        />
+                      ))}
+                    </Stack>
+                  );
+                })}
+              </Stack>
+            ) : (
+              sections.map((section) => {
+                const sheetItems = section.items.filter((item) => !isReviewCard(item));
+                const key = section.title + section.items[0]?.answer.questionId;
+                if (filter === "all") {
+                  return (
+                    <SectionSheet
+                      key={key}
+                      title={section.title}
+                      items={section.items}
+                      errorsOnly={false}
+                    />
+                  );
+                }
+                return (
+                  <SectionSheet
+                    key={key}
+                    title={section.title}
+                    items={sheetItems}
+                    errorsOnly
+                  />
+                );
+              })
+            )}
+          </Box>
         </>
       )}
     </Stack>

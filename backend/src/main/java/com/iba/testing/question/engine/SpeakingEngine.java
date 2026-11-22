@@ -50,11 +50,20 @@ public class SpeakingEngine implements QuestionEngine {
     public void validate(QuestionDraft draft, ContentCheck check) {
         check.criteria(draft.settings());
         JsonNode seconds = draft.settings().path("maxSeconds");
-        check.shape(seconds.isInt() && seconds.asInt() >= 10 && seconds.asInt() <= 600, "settings",
-                "Длительность записи должна быть от 10 до 600 секунд");
+        if (seconds.isMissingNode() || seconds.isNull()) {
+            if (!check.toeflFamily()) {
+                check.complete(false, "settings", "Длительность записи должна быть от 10 до 600 секунд");
+            }
+        } else {
+            check.shape(seconds.isInt() && seconds.asInt() >= 10 && seconds.asInt() <= 600, "settings",
+                    "Длительность записи должна быть от 10 до 600 секунд");
+        }
         JsonNode preparation = draft.settings().path("preparationSeconds");
         check.shape(preparation.isMissingNode() || (preparation.isInt() && preparation.asInt() >= 0 && preparation.asInt() <= 300),
                 "settings", "Время подготовки должно быть от 0 до 300 секунд");
+        JsonNode reading = draft.settings().path("readingSeconds");
+        check.shape(reading.isMissingNode() || (reading.isInt() && reading.asInt() >= 0 && reading.asInt() <= 600),
+                "settings", "Время на чтение должно быть от 0 до 600 секунд");
         check.optionalPoints(draft.scoringConfig(), "maxPoints");
     }
 

@@ -1,16 +1,22 @@
-import { Button } from "@mantine/core";
+import { Box, Button } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { AnswerData } from "@/entities/question/types";
+import { withNormalizedSettings } from "@/entities/test/settings";
+import { partLimitSeconds } from "@/features/test-taking/partTiming";
+import { limitSecondsFromSection } from "@/shared/lib/durationMmSs";
 import { TestRunner } from "@/features/test-taking/TestRunner";
 import { testsApi } from "@/features/tests/testsApi";
+import { mockPreviewScale, ParticipantResultBody } from "@/features/results/ParticipantResultBody";
 import { errorMessage } from "@/shared/api/client";
 import { Loading } from "@/shared/ui/Loading";
 import { MessagePage } from "@/shared/ui/MessagePage";
+import { ToeflTakeShell } from "@/features/test-taking/layouts/toefl/ToeflTakeShell";
+import { TakeCenteredPage } from "@/features/test-taking/TakeCenteredPage";
 
-function endsAfterMinutes(minutes: number) {
-  return new Date(Date.now() + minutes * 60_000).toISOString();
+function endsAfterSeconds(seconds: number) {
+  return new Date(Date.now() + seconds * 1000).toISOString();
 }
 
 export function PreviewPage() {
@@ -31,11 +37,12 @@ export function PreviewPage() {
       return;
     }
     const section = test.sections.find((item) => item.id === sectionId);
-    if (!section?.timeLimitMinutes) {
+    const limitSeconds = limitSecondsFromSection(section ?? {});
+    if (limitSeconds <= 0) {
       return;
     }
     enteredSections.current.add(sectionId);
-    setSectionEnds((current) => ({ ...current, [sectionId]: endsAfterMinutes(section.timeLimitMinutes!) }));
+    setSectionEnds((current) => ({ ...current, [sectionId]: endsAfterSeconds(limitSeconds) }));
   }, [preview.data]);
 
   const onEnterPart = useCallback((partId: string) => {
@@ -44,11 +51,12 @@ export function PreviewPage() {
       return;
     }
     const part = test.sections.flatMap((section) => section.parts ?? []).find((item) => item.id === partId);
-    if (!part?.timeLimitMinutes) {
+    const limitSeconds = partLimitSeconds(part);
+    if (limitSeconds <= 0) {
       return;
     }
     enteredParts.current.add(partId);
-    setPartEnds((current) => ({ ...current, [partId]: endsAfterMinutes(part.timeLimitMinutes!) }));
+    setPartEnds((current) => ({ ...current, [partId]: endsAfterSeconds(limitSeconds) }));
   }, [preview.data]);
 
   const onEnterQuestions = useCallback((questionIds: string[]) => {
@@ -60,7 +68,8 @@ export function PreviewPage() {
       if (enteredQuestions.current.has(questionId)) {
         continue;
       }
-      const question = test.sections.flatMap((section) => section.questions).find((item) => item.id === questionId);
+      const section = test.sections.find((item) => item.questions.some((q) => q.id === questionId));
+      const question = section?.questions.find((item) => item.id === questionId);
       const seconds = question?.settings?.timeLimitSeconds;
       if (!seconds) {
         continue;
@@ -86,9 +95,30 @@ export function PreviewPage() {
       </MessagePage>
     );
   }
+  const test = withNormalizedSettings(preview.data);
+  if (submitted && test.settings.showResultToParticipant) {
+    const examType = test.settings.examType ?? "CUSTOM";
+    const body = (
+      <Box w="100%" maw={examType === "TOEFL" ? "var(--runner-toefl-centered-pane-max)" : 480}>
+        <ParticipantResultBody
+          examType={examType}
+          resultDetail={test.settings.resultDetail}
+          scoreVisible
+          score={0}
+          maxScore={0}
+          scale={mockPreviewScale(test.settings)}
+          previewNote="Демо-предпросмотр: пример итога, ответы не оцениваются"
+        />
+      </Box>
+    );
+    if (examType === "TOEFL") {
+      return <ToeflTakeShell centerContent>{body}</ToeflTakeShell>;
+    }
+    return <TakeCenteredPage>{body}</TakeCenteredPage>;
+  }
   return (
     <TestRunner
-      test={preview.data}
+      test={test}
       answers={answers}
       onAnswer={(questionId, answer) => setAnswers((current) => ({ ...current, [questionId]: answer }))}
       expiresAt={null}

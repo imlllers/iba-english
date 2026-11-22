@@ -6,12 +6,13 @@ import { errorMessage } from "@/shared/api/client";
 import { formatBytes, formatDate } from "@/shared/lib/format";
 import { Icon } from "@/shared/ui/Icon";
 import { Pagination } from "@/shared/ui/Pagination";
+import { MediaVideoThumb } from "./MediaVideoThumb";
 import { mediaApi, teacherMediaUrl } from "./mediaApi";
 
 const ACCEPT: Record<MediaKind, string> = {
   image: "image/png,image/jpeg,image/gif,image/webp",
   audio: "audio/mpeg,audio/wav,audio/ogg,audio/webm,audio/mp4,audio/x-m4a",
-  video: "video/mp4,video/webm",
+  video: "video/mp4,video/quicktime,video/webm",
   application: "application/pdf",
 };
 
@@ -175,8 +176,10 @@ export function MediaPicker({ open, kind, kinds, onKindChange, onClose, onPick }
                 <Box w={56} h={40} bg="gray.1" style={{ display: "grid", placeItems: "center", borderRadius: "var(--mantine-radius-sm)", overflow: "hidden" }} c="dimmed">
                   {kind === "image" ? (
                     <Image src={teacherMediaUrl(asset.id)} alt="" h={40} w={56} fit="cover" />
+                  ) : kind === "video" ? (
+                    <MediaVideoThumb src={teacherMediaUrl(asset.id)} width={56} height={40} />
                   ) : (
-                    <Icon name={kind === "audio" || kind === "video" ? "play" : "file"} />
+                    <Icon name={kind === "audio" ? "play" : "file"} />
                   )}
                 </Box>
                 <Stack gap={0} style={{ minWidth: 0 }}>

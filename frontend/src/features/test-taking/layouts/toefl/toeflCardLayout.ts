@@ -1,0 +1,1 @@
+export const TOEFL_CARD_CONTENT_TOP_OFFSET = "clamp(2.5rem, 20vh, 7.5rem)";

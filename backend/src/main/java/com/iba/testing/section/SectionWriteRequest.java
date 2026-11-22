@@ -9,6 +9,7 @@ public record SectionWriteRequest(
         @Size(max = 4000) String instructions,
         @NotBlank String sectionType,
         Integer timeLimitMinutes,
+        Integer timeLimitSeconds,
         Boolean allowBackToQuestions,
         Boolean allowBackToPart,
         JsonNode items

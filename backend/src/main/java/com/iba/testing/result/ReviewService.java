@@ -234,12 +234,13 @@ public class ReviewService {
     private ObjectNode full(TestAttempt attempt) {
         ObjectNode node = summary(attempt);
         node.set("scaleResult", attempt.getScaleResult() == null ? mapper.nullNode() : attempt.getScaleResult());
+        JsonNode settings = attempt.getTestVersion().getSettingsSnapshot();
+        node.put("examType", settings.path("examType").asText("CUSTOM"));
         ArrayNode items = node.putArray("answers");
         Map<String, Answer> byQuestion = new LinkedHashMap<>();
         for (Answer answer : answers.findByAttempt(attempt)) {
             byQuestion.put(answer.getQuestionId().toString(), answer);
         }
-        JsonNode settings = attempt.getTestVersion().getSettingsSnapshot();
         String scope = settings.path("questionNumberScope").asText("test");
         if (!scope.equals("section") && !scope.equals("part")) {
             scope = "test";

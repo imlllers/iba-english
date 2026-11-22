@@ -8,6 +8,7 @@ public record PartWriteRequest(
         @NotBlank @Size(max = 200) String title,
         @Size(max = 4000) String instructions,
         Integer timeLimitMinutes,
+        Integer timeLimitSeconds,
         Boolean oneQuestionPerPage,
         JsonNode items
 ) {

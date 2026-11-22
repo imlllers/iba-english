@@ -2,11 +2,15 @@ package com.iba.testing.attempt;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.iba.testing.common.Tokens;
 import com.iba.testing.common.exception.ApiException;
 import com.iba.testing.test.AccessDates;
 import com.iba.testing.test.ListeningTiming;
+import com.iba.testing.test.ResultDisplay;
+import com.iba.testing.test.PartTiming;
+import com.iba.testing.test.SectionTiming;
 import com.iba.testing.question.engine.GradeOutcome;
 import com.iba.testing.question.engine.QuestionEngines;
 import com.iba.testing.test.ExamTest;
@@ -26,12 +30,15 @@ import org.springframework.context.ApplicationEventPublisher;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Service
 public class PublicAttemptService {
 
     private static final int MAX_ANSWER_CHARS = 100_000;
+    private static final int TOEFL_SAVE_GRACE_SECONDS = 3;
 
     private final ExamTestRepository tests;
     private final TestVersionRepository versions;
@@ -44,11 +51,12 @@ public class PublicAttemptService {
     private final ScaleEvaluator scales;
     private final ResultMailer resultMailer;
     private final ApplicationEventPublisher events;
+    private final PartPauseResolver partPauseResolver;
 
     public PublicAttemptService(ExamTestRepository tests, TestVersionRepository versions, TestAttemptRepository attempts,
                                 AnswerRepository answers, TestViews views, QuestionEngines grading, ObjectMapper mapper,
                                 Clock clock, ScaleEvaluator scales, ResultMailer resultMailer,
-                                ApplicationEventPublisher events) {
+                                ApplicationEventPublisher events, PartPauseResolver partPauseResolver) {
         this.tests = tests;
         this.versions = versions;
         this.attempts = attempts;
@@ -60,6 +68,7 @@ public class PublicAttemptService {
         this.scales = scales;
         this.resultMailer = resultMailer;
         this.events = events;
+        this.partPauseResolver = partPauseResolver;
     }
 
     @Transactional(readOnly = true)
@@ -119,7 +128,35 @@ public class PublicAttemptService {
         }
         response.putNull("blockEndsAt");
         response.set("test", views.publicView(published.version().getContentSnapshot(), settings));
+        putAudioDone(response, attempt);
+        putReadingProgress(response, attempt);
         return response;
+    }
+
+    @Transactional
+    public ObjectNode markAudioDone(String attemptToken, JsonNode body) {
+        String key = body.path("key").asText("").trim();
+        if (key.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION", "Ключ аудио обязателен");
+        }
+        TestAttempt attempt = requireOpenAttempt(attemptToken);
+        ObjectNode progress = attempt.getProgress().deepCopy();
+        ArrayNode done = progress.has("audioDone") && progress.get("audioDone").isArray()
+                ? (ArrayNode) progress.get("audioDone").deepCopy()
+                : progress.putArray("audioDone");
+        boolean exists = false;
+        for (JsonNode item : done) {
+            if (key.equals(item.asText())) {
+                exists = true;
+                break;
+            }
+        }
+        if (!exists) {
+            done.add(key);
+            progress.set("audioDone", done);
+            attempt.setProgress(progress);
+        }
+        return mapper.createObjectNode().put("saved", true);
     }
 
     @Transactional
@@ -132,13 +169,13 @@ public class PublicAttemptService {
         ObjectNode node = mapper.createObjectNode();
         ensureBlockTimer(attempt, section);
         putBlockEndsAt(node, attempt);
-        int limit = section.path("timeLimitMinutes").asInt(0);
-        if (limit <= 0) {
+        int limitSeconds = SectionTiming.limitSeconds(section);
+        if (limitSeconds <= 0) {
             node.putNull("endsAt");
             return node;
         }
         OffsetDateTime started = progressStart(attempt, "sections", sectionId.toString());
-        node.put("endsAt", started.plusMinutes(limit).toString());
+        node.put("endsAt", started.plusSeconds(limitSeconds).toString());
         return node;
     }
 
@@ -149,14 +186,109 @@ public class PublicAttemptService {
         if (part == null) {
             throw new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Часть не найдена");
         }
+        String partKey = partId.toString();
+        boolean firstStart = !attempt.getProgress().path("parts").hasNonNull(partKey);
+        if (firstStart && isToeflFamily(attempt)) {
+            closeOtherParts(attempt, partKey);
+        }
         ObjectNode node = mapper.createObjectNode();
-        int limit = part.path("timeLimitMinutes").asInt(0);
-        if (limit <= 0) {
+        int limitSeconds = PartTiming.limitSeconds(part);
+        if (limitSeconds <= 0) {
             node.putNull("endsAt");
             return node;
         }
-        OffsetDateTime started = progressStart(attempt, "parts", partId.toString());
-        node.put("endsAt", started.plusMinutes(limit).toString());
+        OffsetDateTime started = progressStart(attempt, "parts", partKey);
+        node.put("endsAt", partDeadline(attempt, started, limitSeconds, partKey).toString());
+        return node;
+    }
+
+    @Transactional
+    public ObjectNode pausePartTimer(String attemptToken, UUID partId, JsonNode body) {
+        if (body == null || body.isNull()) {
+            body = mapper.createObjectNode();
+        }
+        TestAttempt attempt = requireOpenAttempt(attemptToken);
+        if (!attempt.getTestVersion().getSettingsSnapshot().path("pausePartTimerDuringAudio").asBoolean(false)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PAUSE_DISABLED", "Пауза таймера части выключена");
+        }
+        JsonNode part = findPart(attempt, partId);
+        if (part == null || PartTiming.limitSeconds(part) <= 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Часть без таймера");
+        }
+        String audioKey = body.path("audioKey").asText("").trim();
+        if (audioKey.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION", "Нужен audioKey");
+        }
+        int durationSeconds = partPauseResolver.resolveMaxSeconds(
+                attempt.getTestVersion().getContentSnapshot(),
+                partId,
+                audioKey);
+        ObjectNode progress = attempt.getProgress().deepCopy();
+        String partKey = partId.toString();
+        ObjectNode partMeta = progress.withObjectProperty("partPauseMeta").withObject(partKey);
+        ObjectNode keyMeta = partMeta.withObject(audioKey);
+        if (!keyMeta.has("maxMs")) {
+            keyMeta.put("maxMs", durationSeconds * 1000L);
+            keyMeta.put("usedMs", 0L);
+        }
+        ObjectNode sinceByPart = progress.withObjectProperty("partPauseSince").withObject(partKey);
+        List<String> otherPauseKeys = new ArrayList<>();
+        sinceByPart.fieldNames().forEachRemaining(name -> {
+            if (!name.equals(audioKey)) {
+                otherPauseKeys.add(name);
+            }
+        });
+        for (String otherKey : otherPauseKeys) {
+            JsonNode since = sinceByPart.path(otherKey);
+            if (since.isTextual() && !since.asText().isBlank()) {
+                applyPartPauseDelta(progress, partKey, otherKey, since.asText());
+                sinceByPart.remove(otherKey);
+            }
+        }
+        long maxMs = keyMeta.path("maxMs").asLong(0);
+        long usedMs = keyMeta.path("usedMs").asLong(0);
+        if (usedMs < maxMs && !sinceByPart.hasNonNull(audioKey)) {
+            sinceByPart.put(audioKey, OffsetDateTime.now(clock).toString());
+        }
+        attempt.setProgress(progress);
+        ObjectNode node = mapper.createObjectNode();
+        node.put("endsAt", currentPartEndsAt(attempt, partKey, part).toString());
+        return node;
+    }
+
+    @Transactional
+    public ObjectNode resumePartTimer(String attemptToken, UUID partId) {
+        TestAttempt attempt = requireOpenAttempt(attemptToken);
+        JsonNode part = findPart(attempt, partId);
+        if (part == null || PartTiming.limitSeconds(part) <= 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Часть без таймера");
+        }
+        ObjectNode progress = attempt.getProgress().deepCopy();
+        String partKey = partId.toString();
+        JsonNode sinceByPart = progress.path("partPauseSince").path(partKey);
+        if (sinceByPart.isObject()) {
+            ObjectNode sinceObject = (ObjectNode) sinceByPart;
+            List<String> audioKeys = new ArrayList<>();
+            sinceObject.fieldNames().forEachRemaining(audioKeys::add);
+            for (String audioKey : audioKeys) {
+                JsonNode since = sinceObject.path(audioKey);
+                if (since.isTextual() && !since.asText().isBlank()) {
+                    applyPartPauseDelta(progress, partKey, audioKey, since.asText());
+                    sinceObject.remove(audioKey);
+                }
+            }
+            if (sinceObject.isEmpty()) {
+                progress.withObjectProperty("partPauseSince").remove(partKey);
+            }
+            attempt.setProgress(progress);
+        } else if (sinceByPart.isTextual() && !sinceByPart.asText().isBlank()) {
+            String legacyKey = progress.path("partPauseMeta").path(partKey).path("audioKey").asText("legacy");
+            applyPartPauseDelta(progress, partKey, legacyKey, sinceByPart.asText());
+            progress.withObjectProperty("partPauseSince").remove(partKey);
+            attempt.setProgress(progress);
+        }
+        ObjectNode node = mapper.createObjectNode();
+        node.put("endsAt", currentPartEndsAt(attempt, partId.toString(), part).toString());
         return node;
     }
 
@@ -164,15 +296,61 @@ public class PublicAttemptService {
     public ObjectNode startQuestion(String attemptToken, UUID questionId) {
         TestAttempt attempt = requireOpenAttempt(attemptToken);
         JsonNode question = requireQuestion(attempt, questionId);
+        String questionKey = questionId.toString();
+        boolean firstStart = !attempt.getProgress().path("questions").hasNonNull(questionKey);
+        if (firstStart && isToeflFamily(attempt)) {
+            JsonNode section = findSectionForQuestion(attempt, question);
+            if (section != null) {
+                closePriorListeningQuestions(attempt, section, questionKey);
+            }
+        }
         ObjectNode node = mapper.createObjectNode();
         int limit = questionLimit(attempt, question);
         if (limit <= 0) {
             node.putNull("endsAt");
             return node;
         }
-        OffsetDateTime started = progressStart(attempt, "questions", questionId.toString());
-        node.put("endsAt", started.plusSeconds(limit).toString());
+        OffsetDateTime started = progressStart(attempt, "questions", questionKey);
+        node.put("endsAt", questionDeadline(attempt, started, limit).toString());
         return node;
+    }
+
+    @Transactional
+    public ObjectNode markReadingStarted(String attemptToken, UUID questionId) {
+        TestAttempt attempt = requireOpenAttempt(attemptToken);
+        requireQuestion(attempt, questionId);
+        ObjectNode progress = attempt.getProgress().deepCopy();
+        ObjectNode started = progress.withObjectProperty("readingStarted");
+        String key = questionId.toString();
+        if (!started.hasNonNull(key)) {
+            started.put(key, OffsetDateTime.now(clock).toString());
+            attempt.setProgress(progress);
+        }
+        return mapper.createObjectNode().put("saved", true);
+    }
+
+    @Transactional
+    public ObjectNode markReadingDone(String attemptToken, UUID questionId) {
+        TestAttempt attempt = requireOpenAttempt(attemptToken);
+        requireQuestion(attempt, questionId);
+        ObjectNode progress = attempt.getProgress().deepCopy();
+        ArrayNode done = progress.has("readingDone") && progress.get("readingDone").isArray()
+                ? (ArrayNode) progress.get("readingDone").deepCopy()
+                : progress.putArray("readingDone");
+        String key = questionId.toString();
+        boolean exists = false;
+        for (JsonNode item : done) {
+            if (key.equals(item.asText())) {
+                exists = true;
+                break;
+            }
+        }
+        if (!exists) {
+            done.add(key);
+            progress.set("readingDone", done);
+            attempt.setProgress(progress);
+        }
+        return mapper.createObjectNode().put("saved", true);
     }
 
     @Transactional
@@ -213,6 +391,7 @@ public class PublicAttemptService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION", "Ответ слишком большой или повреждён");
         }
         JsonNode question = requireQuestion(attempt, questionId);
+        ensureToeflAnswerAllowed(attempt, question);
         ensureSectionOpen(attempt, question);
         ensurePartOpen(attempt, question);
         ensureQuestionOpen(attempt, question);
@@ -320,7 +499,36 @@ public class PublicAttemptService {
             item.put("questionId", answer.getQuestionId().toString());
             item.set("answerData", answer.getAnswerData());
         }
+        putAudioDone(node, attempt);
+        putReadingProgress(node, attempt);
         return node;
+    }
+
+    private void putAudioDone(ObjectNode response, TestAttempt attempt) {
+        ArrayNode done = mapper.createArrayNode();
+        JsonNode progress = attempt.getProgress();
+        if (progress != null && progress.path("audioDone").isArray()) {
+            for (JsonNode item : progress.get("audioDone")) {
+                done.add(item.asText());
+            }
+        }
+        response.set("audioDone", done);
+    }
+
+    private void putReadingProgress(ObjectNode response, TestAttempt attempt) {
+        JsonNode progress = attempt.getProgress();
+        ObjectNode reading = response.putObject("reading");
+        ObjectNode started = reading.putObject("started");
+        if (progress != null && progress.path("readingStarted").isObject()) {
+            progress.path("readingStarted").properties().forEach(entry ->
+                    started.put(entry.getKey(), entry.getValue().asText()));
+        }
+        ArrayNode done = reading.putArray("done");
+        if (progress != null && progress.path("readingDone").isArray()) {
+            for (JsonNode item : progress.get("readingDone")) {
+                done.add(item.asText());
+            }
+        }
     }
 
     private static boolean hasTimedSectionTypes(JsonNode settings) {
@@ -370,15 +578,34 @@ public class PublicAttemptService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Попытка не найдена"));
     }
 
+    private static boolean contentHasSpeakingSection(TestAttempt attempt) {
+        for (JsonNode section : attempt.getTestVersion().getContentSnapshot().path("sections")) {
+            if ("SPEAKING".equals(section.path("sectionType").asText(""))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private ObjectNode participantResult(TestAttempt attempt, boolean reading) {
         JsonNode settings = attempt.getTestVersion().getSettingsSnapshot();
         boolean show = settings.path("showResultToParticipant").asBoolean(true);
-        String detail = settings.path("resultDetail").asText("score_only");
-        String explanationMode = settings.path("errorExplanationMode").asText("off");
+        boolean emailResult = settings.path("emailResultToParticipant").asBoolean(false);
+        String detail = ResultDisplay.normalizeDetail(settings);
         ObjectNode node = mapper.createObjectNode();
         node.put("status", attempt.getStatus().name());
         node.put("submitted", attempt.getStatus() != AttemptStatus.IN_PROGRESS);
         node.put("resultDetail", detail);
+        node.put("examType", settings.path("examType").asText("CUSTOM"));
+        node.put("showResultToParticipant", show);
+        node.put("emailResultToParticipant", emailResult);
+        node.put("hasSpeakingSection", contentHasSpeakingSection(attempt));
+        String participantEmail = attempt.getParticipantEmail();
+        if (participantEmail != null && !participantEmail.isBlank()) {
+            node.put("participantEmail", participantEmail.trim());
+        } else {
+            node.putNull("participantEmail");
+        }
         if (!show) {
             node.put("scoreVisible", false);
             return node;
@@ -387,21 +614,22 @@ public class PublicAttemptService {
         boolean autoGraded = attempt.getStatus() == AttemptStatus.AUTO_GRADED;
         boolean needsReview = attempt.getStatus() == AttemptStatus.NEEDS_REVIEW;
         boolean finalScore = autoGraded || reviewed;
-        node.put("scoreVisible", finalScore);
-        node.put("reviewVisible", finalScore && "score_and_review".equals(detail));
-        if (finalScore) {
+        boolean showScore = finalScore || (needsReview && show);
+        node.put("scoreVisible", showScore);
+        node.put("reviewVisible", false);
+        if (showScore) {
             node.put("score", attempt.getScore());
             node.put("maxScore", attempt.getMaxScore());
-            if (settings.path("showLevelToParticipant").asBoolean(true) && attempt.getScaleResult() != null) {
-                node.set("scale", attempt.getScaleResult());
+            if (needsReview) {
+                node.put("pendingReview", true);
             }
         } else if (needsReview) {
             node.put("pendingReview", true);
         } else if (reading && attempt.getStatus() == AttemptStatus.IN_PROGRESS) {
             node.put("scoreVisible", false);
         }
-        if (afterExplanation(explanationMode) && attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
-            appendExplanationItems(node, attempt);
+        if (show && ResultDisplay.showsScale(settings) && attempt.getScaleResult() != null) {
+            node.set("scale", attempt.getScaleResult());
         }
         return node;
     }
@@ -524,11 +752,12 @@ public class PublicAttemptService {
 
     private void ensureSectionOpen(TestAttempt attempt, JsonNode question) {
         JsonNode section = findSectionForQuestion(attempt, question);
-        if (section == null || !section.path("timeLimitMinutes").isNumber() || section.path("timeLimitMinutes").asInt() <= 0) {
+        int limitSeconds = section == null ? 0 : SectionTiming.limitSeconds(section);
+        if (limitSeconds <= 0) {
             return;
         }
         OffsetDateTime started = progressStart(attempt, "sections", section.path("id").asText());
-        if (OffsetDateTime.now(clock).isAfter(started.plusMinutes(section.path("timeLimitMinutes").asInt()))) {
+        if (OffsetDateTime.now(clock).isAfter(started.plusSeconds(limitSeconds))) {
             throw new ApiException(HttpStatus.CONFLICT, "SECTION_EXPIRED", "Время секции истекло");
         }
     }
@@ -539,19 +768,22 @@ public class PublicAttemptService {
             return;
         }
         JsonNode part = findPart(attempt, UUID.fromString(partId));
-        if (part == null || !part.path("timeLimitMinutes").isNumber() || part.path("timeLimitMinutes").asInt() <= 0) {
+        int limitSeconds = PartTiming.limitSeconds(part);
+        if (part == null || limitSeconds <= 0) {
             return;
         }
         OffsetDateTime started = progressStart(attempt, "parts", partId);
-        if (OffsetDateTime.now(clock).isAfter(started.plusMinutes(part.path("timeLimitMinutes").asInt()))) {
+        OffsetDateTime deadline = partDeadline(attempt, started, limitSeconds, partId);
+        if (isToeflFamily(attempt)) {
+            deadline = deadline.plusSeconds(TOEFL_SAVE_GRACE_SECONDS);
+        }
+        if (OffsetDateTime.now(clock).isAfter(deadline)) {
             throw new ApiException(HttpStatus.CONFLICT, "PART_EXPIRED", "Время части истекло");
         }
     }
 
     private int questionLimit(TestAttempt attempt, JsonNode question) {
-        JsonNode section = findSectionForQuestion(attempt, question);
-        String sectionType = section == null ? "" : section.path("sectionType").asText("");
-        return ListeningTiming.questionLimit(attempt.getTestVersion().getSettingsSnapshot(), sectionType, question);
+        return ListeningTiming.questionLimit(question);
     }
 
     private void ensureQuestionOpen(TestAttempt attempt, JsonNode question) {
@@ -560,9 +792,148 @@ public class PublicAttemptService {
             return;
         }
         OffsetDateTime started = progressStart(attempt, "questions", question.path("id").asText());
-        if (OffsetDateTime.now(clock).isAfter(started.plusSeconds(limit))) {
+        OffsetDateTime deadline = questionDeadline(attempt, started, limit);
+        if (OffsetDateTime.now(clock).isAfter(deadline)) {
             throw new ApiException(HttpStatus.CONFLICT, "QUESTION_EXPIRED", "Время задания истекло");
         }
+    }
+
+    private OffsetDateTime questionDeadline(TestAttempt attempt, OffsetDateTime started, int limitSeconds) {
+        return started.plusSeconds(limitSeconds);
+    }
+
+    private boolean isToeflFamily(TestAttempt attempt) {
+        return "TOEFL".equals(attempt.getTestVersion().getSettingsSnapshot().path("examType").asText(""));
+    }
+
+    private void ensureToeflAnswerAllowed(TestAttempt attempt, JsonNode question) {
+        if (!isToeflFamily(attempt)) {
+            return;
+        }
+        String partId = question.path("partId").asText("");
+        if (!partId.isBlank() && progressContains(attempt.getProgress().path("closedParts"), partId)) {
+            throw new ApiException(HttpStatus.CONFLICT, "PART_CLOSED", "Время части истекло");
+        }
+        String questionId = question.path("id").asText();
+        if (progressContains(attempt.getProgress().path("closedQuestions"), questionId)) {
+            throw new ApiException(HttpStatus.CONFLICT, "QUESTION_CLOSED", "Время задания истекло");
+        }
+    }
+
+    private static boolean progressContains(JsonNode array, String id) {
+        if (!array.isArray()) {
+            return false;
+        }
+        for (JsonNode item : array) {
+            if (id.equals(item.asText())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void closeOtherParts(TestAttempt attempt, String activePartId) {
+        ObjectNode progress = attempt.getProgress().deepCopy();
+        JsonNode started = progress.path("parts");
+        if (!started.isObject()) {
+            return;
+        }
+        ArrayNode closed = progress.has("closedParts") && progress.get("closedParts").isArray()
+                ? (ArrayNode) progress.get("closedParts").deepCopy()
+                : progress.putArray("closedParts");
+        started.properties().forEach(entry -> {
+            String partId = entry.getKey();
+            if (!partId.equals(activePartId) && !progressContains(closed, partId)) {
+                closed.add(partId);
+            }
+        });
+        progress.set("closedParts", closed);
+        attempt.setProgress(progress);
+    }
+
+    private void closePriorListeningQuestions(TestAttempt attempt, JsonNode section, String activeQuestionId) {
+        if (!"LISTENING".equals(section.path("sectionType").asText(""))) {
+            return;
+        }
+        ObjectNode progress = attempt.getProgress().deepCopy();
+        JsonNode started = progress.path("questions");
+        ArrayNode closed = progress.has("closedQuestions") && progress.get("closedQuestions").isArray()
+                ? (ArrayNode) progress.get("closedQuestions").deepCopy()
+                : progress.putArray("closedQuestions");
+        for (JsonNode item : section.path("questions")) {
+            String questionId = item.path("id").asText();
+            if (questionId.equals(activeQuestionId)) {
+                break;
+            }
+            if (started.hasNonNull(questionId) && !progressContains(closed, questionId)) {
+                closed.add(questionId);
+            }
+        }
+        progress.set("closedQuestions", closed);
+        attempt.setProgress(progress);
+    }
+
+    private OffsetDateTime currentPartEndsAt(TestAttempt attempt, String partId, JsonNode part) {
+        int limitSeconds = PartTiming.limitSeconds(part);
+        JsonNode progress = attempt.getProgress();
+        if (!progress.path("parts").hasNonNull(partId)) {
+            return OffsetDateTime.now(clock).plusSeconds(limitSeconds);
+        }
+        OffsetDateTime started = OffsetDateTime.parse(progress.path("parts").path(partId).asText());
+        return partDeadline(attempt, started, limitSeconds, partId);
+    }
+
+    private OffsetDateTime partDeadline(TestAttempt attempt, OffsetDateTime started, int limitSeconds, String partId) {
+        JsonNode progress = attempt.getProgress();
+        long pauseMs = progress.path("partPauseMs").path(partId).asLong(0);
+        JsonNode pauseSince = progress.path("partPauseSince").path(partId);
+        if (pauseSince.isObject()) {
+            List<String> keys = new ArrayList<>();
+            pauseSince.fieldNames().forEachRemaining(keys::add);
+            for (String audioKey : keys) {
+                JsonNode since = pauseSince.path(audioKey);
+                if (since.isTextual() && !since.asText().isBlank()) {
+                    pauseMs += cappedOpenPauseMs(progress, partId, audioKey, since.asText());
+                }
+            }
+        } else if (pauseSince.isTextual() && !pauseSince.asText().isBlank()) {
+            String legacyKey = progress.path("partPauseMeta").path(partId).path("audioKey").asText("legacy");
+            pauseMs += cappedOpenPauseMs(progress, partId, legacyKey, pauseSince.asText());
+        }
+        return started.plusSeconds(limitSeconds).plus(java.time.Duration.ofMillis(pauseMs));
+    }
+
+    private long cappedOpenPauseMs(JsonNode progress, String partId, String audioKey, String sinceIso) {
+        long added = java.time.Duration.between(OffsetDateTime.parse(sinceIso), OffsetDateTime.now(clock)).toMillis();
+        JsonNode keyMeta = partPauseKeyMeta(progress, partId, audioKey);
+        if (keyMeta != null && keyMeta.isObject()) {
+            long maxMs = keyMeta.path("maxMs").asLong(0);
+            long usedMs = keyMeta.path("usedMs").asLong(0);
+            added = Math.min(added, Math.max(0, maxMs - usedMs));
+        }
+        return added;
+    }
+
+    private void applyPartPauseDelta(ObjectNode progress, String partId, String audioKey, String sinceIso) {
+        long added = cappedOpenPauseMs(progress, partId, audioKey, sinceIso);
+        JsonNode keyMeta = partPauseKeyMeta(progress, partId, audioKey);
+        if (keyMeta != null && keyMeta.isObject()) {
+            long usedMs = keyMeta.path("usedMs").asLong(0);
+            ((ObjectNode) keyMeta).put("usedMs", usedMs + added);
+        }
+        ObjectNode paused = progress.withObjectProperty("partPauseMs");
+        paused.put(partId, paused.path(partId).asLong(0) + added);
+    }
+
+    private JsonNode partPauseKeyMeta(JsonNode progress, String partId, String audioKey) {
+        JsonNode partMeta = progress.path("partPauseMeta").path(partId);
+        if (!partMeta.isObject()) {
+            return null;
+        }
+        if (partMeta.has("maxMs")) {
+            return partMeta;
+        }
+        return partMeta.path(audioKey);
     }
 
     private OffsetDateTime progressStart(TestAttempt attempt, String bucket, String id) {

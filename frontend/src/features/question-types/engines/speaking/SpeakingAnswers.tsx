@@ -7,10 +7,16 @@ export function SpeakingAnswers({ question, update, part = "body" }: EditorProps
   if (part === "score") {
     return <ManualScoring question={question} update={update} />;
   }
-  const set = (field: "maxSeconds" | "preparationSeconds", value: number | undefined, fallback: number) =>
+  const set = (field: "maxSeconds" | "preparationSeconds" | "readingSeconds", value: number | undefined, fallback: number) =>
     update({ settings: { ...question.settings, [field]: value ?? fallback } });
   return (
     <Stack gap="md">
+      <NumberField
+        label="Время на чтение, сек (0 – без отдельной фазы)"
+        value={question.settings.readingSeconds ?? 0}
+        max={600}
+        onChange={(value) => set("readingSeconds", value, 0)}
+      />
       <Group gap="md" align="flex-start" grow wrap="nowrap">
         <Box style={{ flex: 1, minWidth: 0 }}>
           <NumberField

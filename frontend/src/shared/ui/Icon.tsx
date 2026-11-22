@@ -17,6 +17,10 @@ const PATHS = {
   download: "M8 3v8M5 8l3 3 3-3M3 11v2h10v-2",
   play: "M5 3.5v9l7-4.5z",
   pause: "M5.5 3.5v9M10.5 3.5v9",
+  volume: "M3 6.2h2.2L8 3.7v8.6L5.2 9.8H3zM10.2 6.1a2.3 2.3 0 0 1 0 3.8M11.8 4.4a4.4 4.4 0 0 1 0 7.2",
+  mute: "M3 6.2h2.2L8 3.7v8.6L5.2 9.8H3zM10.4 6.2 13.8 9.6M13.8 6.2 10.4 9.6",
+  expand: "M2.5 6V2.5H6M13.5 6V2.5H10M2.5 10v3.5H6M13.5 10v3.5H10",
+  compress: "M6 2.5V6H2.5M10 2.5V6h3.5M6 13.5V10H2.5M10 13.5V10h3.5",
   stop: "M4.5 4.5h7v7h-7z",
   mic: "M8 2.5a2 2 0 0 1 2 2v3a2 2 0 0 1-4 0v-3a2 2 0 0 1 2-2zM4.5 7.5a3.5 3.5 0 0 0 7 0M8 11v2.5",
   panel: "M2.5 3.5h11v9h-11zM10 3.5v9",
@@ -46,14 +50,24 @@ const PATHS = {
   blankDropdown: "M2.5 4.5h11v7h-11zM5.5 8l2.5 2.5L10.5 8",
   blankMarker: "M4 12.5 8 3.5l4 9M5.5 9.5h5",
   blankLine: "M2 9.5h2M5.5 9.5h2M9 9.5h2M12.5 9.5h1.5",
+  book: "M3.5 3h5.5a2.5 2.5 0 0 1 2.5 2.5v9H3.5zM3.5 6.5h6.5M3.5 9.5h6.5M10.5 5.5V14",
+  headphones: "M3.5 8.5v3.5a1.5 1.5 0 0 0 1.5 1.5H5v-7h2.5a3.5 3.5 0 0 1 7 0V5.5h1a1.5 1.5 0 0 1 1.5 1.5v3.5",
+  pencil: "M11.8 2.7a1.2 1.2 0 0 1 1.7 1.7L5.2 12.9 2.5 13.5l.6-2.7z",
 } as const;
 
 export type IconName = keyof typeof PATHS;
 
-export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
+export function Icon({ name, size = 16, filled }: { name: IconName; size?: number; filled?: boolean }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
-      <path d={PATHS[name]} stroke="currentColor" strokeWidth={name === "grip" ? 2.5 : 1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d={PATHS[name]}
+        fill={filled ? "currentColor" : "none"}
+        stroke="currentColor"
+        strokeWidth={filled ? 0 : name === "grip" ? 2.5 : 1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

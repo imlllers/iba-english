@@ -12,7 +12,7 @@ function mergeMeta(test: ExamTest, pending: Partial<TestMetaInput>): TestMetaInp
     settings: normalizeTestSettings({
       ...test.settings,
       ...(pending.settings ?? {}),
-    }),
+    }, test.examPreset),
   };
 }
 

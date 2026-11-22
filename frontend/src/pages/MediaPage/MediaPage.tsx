@@ -6,8 +6,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { HeaderSlotContext } from "@/app/layout/headerSlot";
-import type { MediaFolder, MediaKind } from "@/entities/media/types";
+import type { MediaAsset, MediaFolder, MediaKind } from "@/entities/media/types";
 import { MediaAudioPlayer } from "@/features/media-library/MediaAudioPlayer";
+import { MediaVideoThumb } from "@/features/media-library/MediaVideoThumb";
 import { mediaApi, mediaKindOf, teacherMediaUrl } from "@/features/media-library/mediaApi";
 import { errorMessage } from "@/shared/api/client";
 import { formatBytes, formatDate } from "@/shared/lib/format";
@@ -23,11 +24,20 @@ import { Select } from "@/shared/ui/Select";
 import { SettingsCard } from "@/shared/ui/SettingsCard";
 import { SettingsHint } from "@/shared/ui/SettingsHint";
 import { SettingsSectionTitle } from "@/shared/ui/SettingsSectionTitle";
+import { VideoPlayer } from "@/shared/ui/VideoPlayer";
 
 const SIZE = 20;
 const ALL_CHUNK = 100;
 const MOVE_ROOT = "__root__";
 const ROOT_KEY = "";
+
+function splitFilename(filename: string): { base: string; extension: string } {
+  const dot = filename.lastIndexOf(".");
+  if (dot <= 0) {
+    return { base: filename, extension: "" };
+  }
+  return { base: filename.slice(0, dot), extension: filename.slice(dot) };
+}
 
 function kindLabel(type: ReturnType<typeof mediaKindOf>) {
   if (type === "image") return "Изображение";
@@ -53,11 +63,12 @@ export function MediaPage() {
   const [createName, setCreateName] = useState("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [renameExtension, setRenameExtension] = useState("");
   const [removing, setRemoving] = useState<Removing | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [selectingAll, setSelectingAll] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
-  const [preview, setPreview] = useState<{ src: string; name: string } | null>(null);
+  const [preview, setPreview] = useState<{ src: string; name: string; kind: "image" | "video" } | null>(null);
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   const search = useDebounced(q.trim());
@@ -110,9 +121,20 @@ export function MediaPage() {
     onSuccess: () => {
       setRenamingId(null);
       setRenameValue("");
+      setRenameExtension("");
       invalidate();
     },
     onError: (error) => notify.error(errorMessage(error, "Не удалось переименовать папку")),
+  });
+  const renameAsset = useMutation({
+    mutationFn: ({ id, filename }: { id: string; filename: string }) => mediaApi.renameAsset(id, filename),
+    onSuccess: () => {
+      setRenamingId(null);
+      setRenameValue("");
+      setRenameExtension("");
+      invalidate();
+    },
+    onError: (error) => notify.error(errorMessage(error, "Не удалось переименовать файл")),
   });
   const removeFolder = useMutation({
     mutationFn: (id: string) => mediaApi.deleteFolder(id),
@@ -145,7 +167,7 @@ export function MediaPage() {
   const items = data?.items ?? [];
   const searching = Boolean(data?.searching);
   const allFolders = folderTree.data ?? [];
-  const busy = upload.isPending || createFolder.isPending || renameFolder.isPending
+  const busy = upload.isPending || createFolder.isPending || renameFolder.isPending || renameAsset.isPending
     || removeFolder.isPending || bulkMove.isPending || bulkDelete.isPending;
   const selectedCount = selected.size;
   const total = data?.total ?? 0;
@@ -193,12 +215,22 @@ export function MediaPage() {
     skipRenameBlur.current = false;
     setRenamingId(folder.id);
     setRenameValue(folder.name);
+    setRenameExtension("");
+  };
+
+  const beginRenameFile = (asset: MediaAsset) => {
+    skipRenameBlur.current = false;
+    const { base, extension } = splitFilename(asset.filename);
+    setRenamingId(asset.id);
+    setRenameValue(base);
+    setRenameExtension(extension);
   };
 
   const cancelRename = () => {
     skipRenameBlur.current = true;
     setRenamingId(null);
     setRenameValue("");
+    setRenameExtension("");
   };
 
   const commitRename = (folder: MediaFolder) => {
@@ -210,9 +242,30 @@ export function MediaPage() {
     if (!name || name === folder.name) {
       setRenamingId(null);
       setRenameValue("");
+      setRenameExtension("");
       return;
     }
     renameFolder.mutate({ id: folder.id, name });
+  };
+
+  const commitRenameFile = (asset: MediaAsset) => {
+    if (skipRenameBlur.current) {
+      skipRenameBlur.current = false;
+      return;
+    }
+    const base = renameValue.trim();
+    if (!base) {
+      cancelRename();
+      return;
+    }
+    const filename = `${base}${renameExtension}`;
+    if (filename === asset.filename) {
+      setRenamingId(null);
+      setRenameValue("");
+      setRenameExtension("");
+      return;
+    }
+    renameAsset.mutate({ id: asset.id, filename });
   };
 
   const toggleOne = (id: string) => {
@@ -446,7 +499,7 @@ export function MediaPage() {
         className="sr-only"
         type="file"
         multiple
-        accept="audio/*,image/*,video/mp4,video/webm"
+        accept="audio/*,image/*,video/mp4,video/quicktime,video/webm"
         tabIndex={-1}
         aria-hidden="true"
         onChange={(event) => {
@@ -597,10 +650,26 @@ export function MediaPage() {
                               <UnstyledButton
                                 aria-label={`Открыть «${asset.filename}»`}
                                 style={{ display: "flex", borderRadius: "var(--mantine-radius-sm)" }}
-                                onClick={() => setPreview({ src: teacherMediaUrl(asset.id), name: asset.filename })}
+                                onClick={() => setPreview({
+                                  src: teacherMediaUrl(asset.id),
+                                  name: asset.filename,
+                                  kind: "image",
+                                })}
                               >
                                 <Image src={teacherMediaUrl(asset.id)} alt="" w={40} h={40} radius="sm" fit="cover" />
                               </UnstyledButton>
+                            ) : type === "video" ? (
+                              <MediaVideoThumb
+                                src={teacherMediaUrl(asset.id)}
+                                width={40}
+                                height={40}
+                                label={`Открыть «${asset.filename}»`}
+                                onOpen={() => setPreview({
+                                  src: teacherMediaUrl(asset.id),
+                                  name: asset.filename,
+                                  kind: "video",
+                                })}
+                              />
                             ) : type === "audio" ? (
                               <MediaAudioPlayer compact src={teacherMediaUrl(asset.id)} label={asset.filename} />
                             ) : (
@@ -608,7 +677,53 @@ export function MediaPage() {
                             )}
                           </Box>
                           <Stack gap={0} style={{ minWidth: 0, flex: 1 }}>
-                            <Text fw={600} truncate title={asset.filename}>{asset.filename}</Text>
+                            {renamingId === asset.id ? (
+                              <Group
+                                gap={0}
+                                wrap="nowrap"
+                                align="center"
+                                className="media-file-rename"
+                                style={{ minWidth: 0 }}
+                              >
+                                <input
+                                  ref={renameInput}
+                                  value={renameValue}
+                                  disabled={renameAsset.isPending}
+                                  aria-label={`Название файла «${asset.filename}»`}
+                                  style={{ minWidth: 0, flex: 1 }}
+                                  onChange={(event) => setRenameValue(event.currentTarget.value)}
+                                  onBlur={() => commitRenameFile(asset)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
+                                      event.preventDefault();
+                                      event.currentTarget.blur();
+                                    }
+                                    if (event.key === "Escape") {
+                                      event.preventDefault();
+                                      cancelRename();
+                                    }
+                                  }}
+                                />
+                                {renameExtension ? (
+                                  <Text component="span" fw={600} style={{ flex: "none", userSelect: "none" }}>
+                                    {renameExtension}
+                                  </Text>
+                                ) : null}
+                              </Group>
+                            ) : (
+                              <Text
+                                fw={600}
+                                truncate
+                                title={`${asset.filename} – двойной клик, чтобы переименовать`}
+                                style={{ cursor: "text" }}
+                                onDoubleClick={(event) => {
+                                  event.preventDefault();
+                                  beginRenameFile(asset);
+                                }}
+                              >
+                                {asset.filename}
+                              </Text>
+                            )}
                             <Text size="sm" c="dimmed">
                               {kindLabel(type)} · {formatBytes(asset.sizeBytes)} · {formatDate(asset.createdAt)}
                             </Text>
@@ -626,7 +741,11 @@ export function MediaPage() {
       </Grid>
 
       <Modal opened={preview !== null} onClose={() => setPreview(null)} title={preview?.name} size="xl">
-        {preview ? <Image src={preview.src} alt={preview.name} radius="sm" fit="contain" mah="70vh" /> : null}
+        {preview?.kind === "video" ? (
+          <VideoPlayer src={preview.src} aria-label={preview.name} />
+        ) : preview ? (
+          <Image src={preview.src} alt={preview.name} radius="sm" fit="contain" mah="70vh" />
+        ) : null}
       </Modal>
 
       <Modal

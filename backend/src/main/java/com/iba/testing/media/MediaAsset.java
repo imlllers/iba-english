@@ -50,6 +50,9 @@ public class MediaAsset {
     @Column(name = "in_library", nullable = false)
     private boolean inLibrary = true;
 
+    @Column(name = "duration_seconds")
+    private Integer durationSeconds;
+
     public UUID getId() {
         return id;
     }
@@ -128,5 +131,13 @@ public class MediaAsset {
 
     public void setInLibrary(boolean inLibrary) {
         this.inLibrary = inLibrary;
+    }
+
+    public Integer getDurationSeconds() {
+        return durationSeconds;
+    }
+
+    public void setDurationSeconds(Integer durationSeconds) {
+        this.durationSeconds = durationSeconds;
     }
 }

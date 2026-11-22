@@ -233,7 +233,7 @@ function FormatToolbarControls({
         <ControlTip label={L.hrControlLabel!}><MantineRTE.Hr title="" /></ControlTip>
       </MantineRTE.ControlsGroup>
       <MantineRTE.ControlsGroup>
-        <ControlTip label={L.tableInsertControlLabel!}><MantineRTE.TableInsert title="" /></ControlTip>
+        <ControlTip label={L.tableInsertControlLabel!}><MantineRTE.TableInsert title="" withHeaderRow={false} /></ControlTip>
         <ControlTip label={L.tableMergeCellsControlLabel!}><MantineRTE.TableMergeCells title="" /></ControlTip>
       </MantineRTE.ControlsGroup>
       {blankTools ? (

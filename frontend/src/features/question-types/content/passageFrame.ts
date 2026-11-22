@@ -1,4 +1,5 @@
 import type { ContentItem, Doc, DocNode } from "@/entities/question/types";
+import type { ExamDisplayType } from "@/entities/test/types";
 import { contentItemFilled } from "./contentItems";
 
 export const passageFrameStyle = {
@@ -25,7 +26,10 @@ export function docIsOnlyTable(doc: Doc | null | undefined): boolean {
   return meaningful.length > 0 && meaningful.every((node) => node.type === "table");
 }
 
-export function shouldFrameContentItems(items: ContentItem[]): boolean {
+export function shouldFrameContentItems(items: ContentItem[], examType?: ExamDisplayType | null): boolean {
+  if (examType === "TOEFL") {
+    return false;
+  }
   const filled = items.filter(contentItemFilled);
   if (filled.length === 0) {
     return false;

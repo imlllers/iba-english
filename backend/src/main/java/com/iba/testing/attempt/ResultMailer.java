@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.iba.testing.common.exception.ApiException;
 import com.iba.testing.mail.MailService;
 import com.iba.testing.question.engine.QuestionEngines;
+import com.iba.testing.test.ResultDisplay;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -131,7 +132,7 @@ public class ResultMailer {
         JsonNode scale = attempt.getScaleResult();
         boolean hasScale = scale != null && !scale.isNull() && scale.path("total").isNumber();
         boolean official = QuestionEngines.officialExam(settings.path("examType").asText(""));
-        boolean showScale = hasScale && (official || settings.path("showLevelToParticipant").asBoolean(true));
+        boolean showScale = hasScale && (official || ResultDisplay.showsScale(settings));
         if (!(official && showScale)) {
             rows.add(new String[] {"Баллы", plain(attempt.getScore()) + " из " + plain(attempt.getMaxScore())});
         }
@@ -141,11 +142,13 @@ public class ResultMailer {
                     rows.add(new String[] {section.path("name").asText(), number(section.path("score").asDouble())});
                 }
             }
-            String total = number(scale.path("total").asDouble());
-            if (scale.path("level").isTextual()) {
-                total += " (" + scale.path("level").asText() + ")";
+            if (ResultDisplay.showsOverall(settings) && scale.path("total").isNumber()) {
+                String total = number(scale.path("total").asDouble());
+                if (scale.path("level").isTextual()) {
+                    total += " (" + scale.path("level").asText() + ")";
+                }
+                rows.add(new String[] {"Итог " + scale.path("title").asText(""), total});
             }
-            rows.add(new String[] {"Итог " + scale.path("title").asText(""), total});
         }
         return rows;
     }

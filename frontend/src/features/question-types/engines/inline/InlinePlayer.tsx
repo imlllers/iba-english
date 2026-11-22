@@ -161,7 +161,11 @@ export function InlinePlayer({
           if (event.key.trim() === "") return;
           cells[caret] = event.key;
           saveCells(id, cells);
-          setCaret(id, Math.min(caret + 1, letters - 1));
+          if (caret < letters - 1) {
+            setCaret(id, caret + 1);
+          } else {
+            moveBlank(id, 1);
+          }
         }
     }
   };
@@ -177,7 +181,11 @@ export function InlinePlayer({
       cell += 1;
     }
     saveCells(id, cells);
-    setCaret(id, Math.min(cell, letters - 1));
+    if (cell >= letters) {
+      moveBlank(id, 1);
+    } else {
+      setCaret(id, cell);
+    }
   };
 
   const caretFromPointer = (id: string, input: HTMLInputElement, clientX: number) => {
@@ -253,7 +261,11 @@ export function InlinePlayer({
                 onChange={(event) => {
                   const next = [...event.target.value.replace(/\s+/g, "")].slice(0, letters);
                   set(id, next.join(""));
-                  setCaret(id, Math.min(next.length, letters - 1));
+                  if (next.length >= letters) {
+                    moveBlank(id, 1);
+                  } else {
+                    setCaret(id, next.length);
+                  }
                 }}
                 onPaste={(event) => {
                   event.preventDefault();

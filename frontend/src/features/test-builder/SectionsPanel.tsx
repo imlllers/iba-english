@@ -9,7 +9,13 @@ import { Icon } from "@/shared/ui/Icon";
 import { SidebarLogo } from "@/shared/ui/SidebarLogo";
 import { sidebarNavLinkProps } from "@/shared/ui/sidebarNav";
 import type { BuilderWorkspace } from "./BuilderBar";
-import { outlineOfScope, questionsOfBlock, questionsOfPart, sectionParts } from "./sectionParts";
+import {
+  outlineOfScope,
+  questionsOfBlock,
+  questionsOfPart,
+  sectionParts,
+  type OutlineItem,
+} from "./sectionParts";
 import { WorkspaceSwitch } from "./WorkspaceSwitch";
 
 function dropWrapStyle(opts: { dragging?: boolean; edge?: "before" | "after" | null; target?: boolean }): CSSProperties {
@@ -80,6 +86,78 @@ function readDrag(event: DragEvent): DragPayload | null {
 
 function slotLabel(start: number, count: number) {
   return formatQuestionRange(start, count, "1");
+}
+
+function firstQuestionInOutline<T extends Question>(
+  section: Section,
+  partId: string | null,
+): T | null {
+  for (const item of outlineOfScope(section, partId) as OutlineItem<T>[]) {
+    if (item.kind === "question") {
+      return item.question;
+    }
+    const inBlock = questionsOfBlock(section, item.block.id);
+    if (inBlock.length) {
+      return inBlock[0] as T;
+    }
+  }
+  return null;
+}
+
+function lastQuestionInOutline<T extends Question>(
+  section: Section,
+  partId: string | null,
+): T | null {
+  const outline = outlineOfScope(section, partId) as OutlineItem<T>[];
+  for (let index = outline.length - 1; index >= 0; index -= 1) {
+    const item = outline[index];
+    if (item.kind === "question") {
+      return item.question;
+    }
+    const inBlock = questionsOfBlock(section, item.block.id);
+    if (inBlock.length) {
+      return inBlock[inBlock.length - 1] as T;
+    }
+  }
+  return null;
+}
+
+type DropSlotKey = string;
+
+function dropSlotKey(sectionId: string, partId: string | null, position: "start" | "end") {
+  return `${sectionId}:${partId ?? ""}:${position}`;
+}
+
+function OutlineDropSlot({
+  position,
+  active,
+  onDragOver,
+  onDrop,
+}: {
+  position: "start" | "end";
+  active: boolean;
+  onDragOver: (event: DragEvent) => void;
+  onDrop: (event: DragEvent) => void;
+}) {
+  return (
+    <Box
+      aria-hidden={!active}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      style={{
+        flex: "none",
+        minHeight: active ? 20 : 6,
+        marginBlock: position === "start" ? "0 2px" : "2px 0",
+        borderRadius: "var(--mantine-radius-sm)",
+        ...(active
+          ? {
+            outline: "1px dashed color-mix(in srgb, var(--color-white) 60%, transparent)",
+            background: "color-mix(in srgb, var(--color-white) 12%, transparent)",
+          }
+          : {}),
+      }}
+    />
+  );
 }
 
 function QuestionRow({
@@ -331,6 +409,7 @@ export function SectionsPanel({
   const draggingId = dragging?.questionId ?? null;
   const [dropBlockId, setDropBlockId] = useState<string | null>(null);
   const [dropPartId, setDropPartId] = useState<string | null>(null);
+  const [dropSlot, setDropSlot] = useState<DropSlotKey | null>(null);
   const [dropEdge, setDropEdge] = useState<{ questionId: string; edge: "before" | "after" } | null>(null);
 
   const examType = test.settings.examType ?? "CUSTOM";
@@ -346,6 +425,7 @@ export function SectionsPanel({
   const clearDrop = () => {
     setDropBlockId(null);
     setDropPartId(null);
+    setDropSlot(null);
     setDropEdge(null);
   };
 
@@ -374,6 +454,7 @@ export function SectionsPanel({
     const edge = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
     setDropBlockId(null);
     setDropPartId(null);
+    setDropSlot(null);
     setDropEdge({ questionId: question.id, edge });
   };
 
@@ -406,6 +487,7 @@ export function SectionsPanel({
     event.dataTransfer.dropEffect = "move";
     setDropEdge(null);
     setDropPartId(null);
+    setDropSlot(null);
     setDropBlockId(block.id);
   };
 
@@ -439,6 +521,7 @@ export function SectionsPanel({
     event.dataTransfer.dropEffect = "move";
     setDropEdge(null);
     setDropBlockId(null);
+    setDropSlot(null);
     setDropPartId(nextPartId);
   };
 
@@ -451,12 +534,96 @@ export function SectionsPanel({
     if (!payload || payload.sectionId !== section.id) {
       return;
     }
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const beforePart = event.clientY < rect.top + rect.height / 2;
+    const first = firstQuestionInOutline(section, nextPartId);
+    const last = lastQuestionInOutline(section, nextPartId);
     onPlaceQuestion({
       sectionId: section.id,
       questionId: payload.questionId,
       materialBlockId: null,
       partId: nextPartId,
+      beforeId: beforePart && first ? first.id : null,
+      afterId: !beforePart && last ? last.id : null,
     });
+  };
+
+  const onDragOverSlot = (
+    section: Section,
+    partId: string | null,
+    position: "start" | "end",
+    event: DragEvent,
+  ) => {
+    if (!dragging || dragging.sectionId !== section.id) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    setDropEdge(null);
+    setDropBlockId(null);
+    setDropPartId(null);
+    setDropSlot(dropSlotKey(section.id, partId, position));
+  };
+
+  const onDropOnSlot = (
+    section: Section,
+    partId: string | null,
+    position: "start" | "end",
+    event: DragEvent,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const payload = readDrag(event) ?? dragging;
+    clearDrop();
+    setDragging(null);
+    if (!payload || payload.sectionId !== section.id) {
+      return;
+    }
+    const first = firstQuestionInOutline(section, partId);
+    const last = lastQuestionInOutline(section, partId);
+    onPlaceQuestion({
+      sectionId: section.id,
+      questionId: payload.questionId,
+      materialBlockId: null,
+      partId: partId ?? undefined,
+      beforeId: position === "start" && first ? first.id : null,
+      afterId: position === "end" && last ? last.id : null,
+    });
+  };
+
+  const renderOutlineScope = (
+    section: Section,
+    partId: string | null,
+    current: boolean,
+  ) => {
+    const startKey = dropSlotKey(section.id, partId, "start");
+    const endKey = dropSlotKey(section.id, partId, "end");
+    return (
+      <>
+        <OutlineDropSlot
+          position="start"
+          active={dropSlot === startKey}
+          onDragOver={(event) => onDragOverSlot(section, partId, "start", event)}
+          onDrop={(event) => onDropOnSlot(section, partId, "start", event)}
+        />
+        <OutlineList
+          section={section}
+          partId={partId}
+          current={current}
+          blockId={blockId}
+          questionId={questionId}
+          numbers={numbers}
+          {...outlineProps}
+        />
+        <OutlineDropSlot
+          position="end"
+          active={dropSlot === endKey}
+          onDragOver={(event) => onDragOverSlot(section, partId, "end", event)}
+          onDrop={(event) => onDropOnSlot(section, partId, "end", event)}
+        />
+      </>
+    );
   };
 
   const outlineProps = {
@@ -508,17 +675,7 @@ export function SectionsPanel({
                   onClick={() => onSelectSection(section.id)}
                 />
                 <Stack gap={0} pl="sm">
-                  {parts.length === 0 && (
-                    <OutlineList
-                      section={section}
-                      partId={null}
-                      current={current}
-                      blockId={blockId}
-                      questionId={questionId}
-                      numbers={numbers}
-                      {...outlineProps}
-                    />
-                  )}
+                  {parts.length === 0 && renderOutlineScope(section, null, current)}
                   {parts.map((part) => {
                     const activePart = current && partId === part.id && !blockId && !questionId;
                     const partDropTarget = dropPartId === part.id;
@@ -543,15 +700,7 @@ export function SectionsPanel({
                           />
                         </div>
                         <Stack gap={0} pl="sm">
-                          <OutlineList
-                            section={section}
-                            partId={part.id}
-                            current={current}
-                            blockId={blockId}
-                            questionId={questionId}
-                            numbers={numbers}
-                            {...outlineProps}
-                          />
+                          {renderOutlineScope(section, part.id, current)}
                         </Stack>
                       </div>
                     );
@@ -567,16 +716,16 @@ export function SectionsPanel({
         px="md"
         py="sm"
       >
-        <Button fullWidth variant="subtle" color="gray" c="white" size="compact-sm" justify="flex-start" leftSection={<Icon name="plus" />} disabled={!canAddQuestion} onClick={onAddQuestion}>
+        <Button fullWidth variant="subtle" size="compact-sm" justify="flex-start" leftSection={<Icon name="plus" />} disabled={!canAddQuestion} onClick={onAddQuestion}>
           Задание
         </Button>
-        <Button fullWidth variant="subtle" color="gray" c="white" size="compact-sm" justify="flex-start" leftSection={<Icon name="plus" />} disabled={!canAddBlock} onClick={onAddBlock}>
+        <Button fullWidth variant="subtle" size="compact-sm" justify="flex-start" leftSection={<Icon name="plus" />} disabled={!canAddBlock} onClick={onAddBlock}>
           Группа вопросов
         </Button>
-        <Button fullWidth variant="subtle" color="gray" c="white" size="compact-sm" justify="flex-start" leftSection={<Icon name="plus" />} disabled={!canAddPart} onClick={onAddPart}>
+        <Button fullWidth variant="subtle" size="compact-sm" justify="flex-start" leftSection={<Icon name="plus" />} disabled={!canAddPart} onClick={onAddPart}>
           Часть
         </Button>
-        <Button fullWidth variant="subtle" color="gray" c="white" size="compact-sm" justify="flex-start" leftSection={<Icon name="plus" />} onClick={onAddSection}>
+        <Button fullWidth variant="subtle" size="compact-sm" justify="flex-start" leftSection={<Icon name="plus" />} onClick={onAddSection}>
           Секция
         </Button>
       </Stack>

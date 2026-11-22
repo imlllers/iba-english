@@ -26,6 +26,7 @@ type PartFormProps = {
 export function PartForm({
   part,
   alone,
+  examType = "CUSTOM",
   defaultOneQuestionPerPage = true,
   focused = false,
   onActivate,
@@ -62,6 +63,7 @@ export function PartForm({
       title: nextTitle,
       instructions: serializeInstructionDoc(nextInstructions),
       timeLimitMinutes: part.timeLimitMinutes ?? null,
+      timeLimitSeconds: part.timeLimitSeconds ?? null,
       oneQuestionPerPage: nextOne,
       items: nextItems,
     };
@@ -148,7 +150,9 @@ export function PartForm({
         ariaLabel="Превью части для участника"
         title={title}
         instructions={instructions}
-        items={items.filter((item) => item.kind !== "audio")}
+        items={items}
+        examType={examType}
+        previewScope="part"
       />
     </Stack>
   );

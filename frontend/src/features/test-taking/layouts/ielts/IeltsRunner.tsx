@@ -1,8 +1,8 @@
 import { Alert, Box, Button, Card, Group, Modal, Stack, Text, UnstyledButton } from "@mantine/core";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AnswerData, ContentItem } from "@/entities/question/types";
 import type { ExamDisplayType } from "@/entities/test/types";
-import { ERROR_EXPLANATIONS_ENABLED, normalizeQuestionNumberFormat } from "@/entities/test/settings";
+import { errorExplanationsEnabled, normalizeQuestionNumberFormat } from "@/entities/test/settings";
 import {
   formatQuestionRange,
   formatQuestionsHeading,
@@ -19,17 +19,23 @@ import { useMedia } from "@/features/question-types/media/MediaContext";
 import { PromptView } from "@/features/question-types/prompt/PromptView";
 import { QuestionPlayer } from "@/features/question-types/QuestionPlayer";
 import { useNow } from "@/shared/lib/useNow";
+import { limitSecondsFromSection } from "@/shared/lib/durationMmSs";
+import { partLimitSeconds } from "../../partTiming";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { SettingsHint } from "@/shared/ui/SettingsHint";
 import { Countdown } from "../../Countdown";
 import { activeGateKey, pageGateAudios, questionAudioReady } from "../../pageAudioGate";
 import { buildRunnerPages, type RunnerPage } from "../../runnerPages";
 import { publicApi } from "../../publicApi";
+import { shouldAutoPlayQuestionTaskVideo } from "../toefl/questionTaskVideo";
 import { TakeHeader } from "../../TakeHeader";
 import { useFocusLossGuard } from "../../useFocusLossGuard";
 import { usePersistentPageIndex } from "../../usePersistentPageIndex";
 import { navUnits } from "../../navUnits";
+import { showRunnerBack, showRunnerForward } from "../../runnerChromeNav";
+import { needsForwardConfirm as shouldConfirmForward } from "../../runnerNavigation";
 import type { TestRunnerProps } from "../../runnerTypes";
+import { RunnerScrollPane } from "../../RunnerScrollPane";
 
 function leftSeconds(end: string | null | undefined, now: number) {
   return end ? Math.ceil((new Date(end).getTime() - now) / 1000) : null;
@@ -47,99 +53,6 @@ function withoutAudio(items: ContentItem[]) {
   return items.filter((item) => item.kind !== "audio");
 }
 
-const panelStyle = {
-  minWidth: 0,
-  minHeight: 0,
-  height: "100%",
-  overflow: "auto",
-  padding: "var(--mantine-spacing-lg)",
-  background: "var(--mantine-color-body)",
-  borderRadius: "var(--mantine-radius-md)",
-  boxShadow: "var(--mantine-shadow-sm)",
-} as const;
-
-const PANEL_RAIL_PX = 10;
-
-function ScrollPane({ className, children }: { className: string; children: ReactNode }) {
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const [thumb, setThumb] = useState({ top: 0, size: 1 });
-
-  const sync = useCallback(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    const size = Math.min(1, clientHeight / Math.max(scrollHeight, 1));
-    const travel = Math.max(scrollHeight - clientHeight, 0);
-    const top = travel === 0 ? 0 : (scrollTop / travel) * (1 - size);
-    setThumb({ top, size: Math.max(size, 0.12) });
-  }, []);
-
-  useLayoutEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    sync();
-    el.addEventListener("scroll", sync, { passive: true });
-    const ro = new ResizeObserver(sync);
-    ro.observe(el);
-    const inner = el.firstElementChild;
-    if (inner) ro.observe(inner);
-    return () => {
-      el.removeEventListener("scroll", sync);
-      ro.disconnect();
-    };
-  }, [sync, children]);
-
-  return (
-    <Box
-      className={className}
-      style={{
-        ...panelStyle,
-        overflow: "hidden",
-        padding: 0,
-        display: "flex",
-        flexDirection: "row",
-      }}
-    >
-      <Box
-        ref={scrollerRef}
-        style={{
-          flex: 1,
-          minWidth: 0,
-          minHeight: 0,
-          overflow: "auto",
-          padding: "var(--mantine-spacing-lg)",
-        }}
-      >
-        {children}
-      </Box>
-      <Box
-        aria-hidden
-        style={{
-          flex: "none",
-          width: PANEL_RAIL_PX,
-          alignSelf: "stretch",
-          position: "relative",
-          background: "var(--mantine-color-body)",
-          borderTopRightRadius: "var(--mantine-radius-md)",
-          borderBottomRightRadius: "var(--mantine-radius-md)",
-        }}
-      >
-        <Box
-          style={{
-            position: "absolute",
-            left: 2,
-            right: 2,
-            top: `${thumb.top * 100}%`,
-            height: `${thumb.size * 100}%`,
-            borderRadius: 4,
-            background: "color-mix(in srgb, var(--color-dark) 28%, transparent)",
-          }}
-        />
-      </Box>
-    </Box>
-  );
-}
-
 export function IeltsRunner(props: TestRunnerProps) {
   const {
     test, answers, onAnswer, saveError, expiresAt, blockEndsAt = null, sectionEnds,
@@ -150,7 +63,9 @@ export function IeltsRunner(props: TestRunnerProps) {
   } = props;
   const media = useMedia();
   const oneQuestionPerPage = test.settings.oneQuestionPerPage !== false;
-  const explanationMode = ERROR_EXPLANATIONS_ENABLED ? test.settings.errorExplanationMode ?? "off" : "off";
+  const explanationMode = errorExplanationsEnabled(test.settings.examType)
+    ? test.settings.errorExplanationMode ?? "off"
+    : "off";
   const checkOnLeave = Boolean(attemptToken)
     && (explanationMode === "during" || explanationMode === "both");
   const numberScope = test.settings.questionNumberScope ?? "test";
@@ -163,6 +78,7 @@ export function IeltsRunner(props: TestRunnerProps) {
   const [index, setIndex] = usePersistentPageIndex(pages, pageStorageKey);
   const [focusSlot, setFocusSlot] = useState<number | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [forwardConfirm, setForwardConfirm] = useState(false);
   const [audioDone, setAudioDone] = useState(() => new Set<string>());
   const [autoPlayBlocked, setAutoPlayBlocked] = useState(false);
   const headerAutoStarted = useRef(new Set<string>());
@@ -184,6 +100,7 @@ export function IeltsRunner(props: TestRunnerProps) {
   const questionAdvanced = useRef(new Set<string>());
   const focusLossMax = test.settings.focusLossMaxWarnings ?? 0;
   const audioAutoStart = Boolean(test.settings.audioAutoStart);
+  const videoAutoStart = Boolean(test.settings.videoAutoStart);
   const allowEarlySubmit = test.settings.allowEarlySubmit !== false;
   const autoAdvanceOnQuestionTimeout = Boolean(test.settings.autoAdvanceOnQuestionTimeout);
   const timedSectionTypes = test.settings.timeLimitSectionTypes ?? [];
@@ -534,6 +451,14 @@ export function IeltsRunner(props: TestRunnerProps) {
     </Stack>
   ) : null);
 
+  const stepForward = (next: number) => {
+    if (shouldConfirmForward(index, next, pages, test.settings, demoMode)) {
+      setForwardConfirm(true);
+      return;
+    }
+    go(next);
+  };
+
   const onChromeNext = async () => {
     if (checking) {
       return;
@@ -543,7 +468,7 @@ export function IeltsRunner(props: TestRunnerProps) {
       return;
     }
     if (index < pages.length - 1) {
-      go(index + 1);
+      stepForward(index + 1);
     } else {
       setConfirming(true);
     }
@@ -646,7 +571,10 @@ export function IeltsRunner(props: TestRunnerProps) {
                         const allowed = canGoTo(pageIndex);
                         return navUnits(page, answers, examType).map((unit) => {
                           const answered = unit.answered === unit.total;
-                          const focused = focusSlot !== null && focusSlot >= unit.start && focusSlot <= unit.end;
+                          const focused = page.key === current?.key
+                            && focusSlot !== null
+                            && focusSlot >= unit.start
+                            && focusSlot <= unit.end;
                           const label = formatQuestionRange(unit.start, unit.total, numberFormat);
                           return (
                             <Box component="li" key={unit.key}>
@@ -851,6 +779,7 @@ export function IeltsRunner(props: TestRunnerProps) {
                 examType={examType}
                 examAudio={questionExamAudio(question.id)}
                 hideQuestionsHeading={Boolean(groupHeading && ownHeading === groupHeading)}
+                autoPlayTaskVideo={shouldAutoPlayQuestionTaskVideo(false, question, false, videoAutoStart)}
               />
               {explanations[question.id] ? (
                 <Alert color="orange" variant="light" p="sm">
@@ -881,13 +810,13 @@ export function IeltsRunner(props: TestRunnerProps) {
 
   const sectionHeaderSeconds = currentSectionLeft !== null
     ? currentSectionLeft
-    : (current?.section.timeLimitMinutes && sectionEnds[current.section.id] == null
-      ? current.section.timeLimitMinutes * 60
+    : (current?.section && limitSecondsFromSection(current.section) > 0 && sectionEnds[current.section.id] == null
+      ? limitSecondsFromSection(current.section)
       : null);
   const partHeaderSeconds = currentPartLeft !== null
     ? currentPartLeft
-    : (current?.part?.timeLimitMinutes && current.part.id && partEnds[current.part.id] == null
-      ? current.part.timeLimitMinutes * 60
+    : (current?.part && partLimitSeconds(current.part) > 0 && current.part.id && partEnds[current.part.id] == null
+      ? partLimitSeconds(current.part)
       : null);
 
   const alerts = (
@@ -908,7 +837,7 @@ export function IeltsRunner(props: TestRunnerProps) {
     </>
   );
 
-  const earlyFinish = current && index < pages.length - 1 && allowEarlySubmit ? (
+  const earlyFinish = current && !demoMode && index < pages.length - 1 && allowEarlySubmit ? (
       <Group justify="flex-end">
         <Button
           variant="subtle"
@@ -927,21 +856,25 @@ export function IeltsRunner(props: TestRunnerProps) {
         </Button>
       </Group>
   ) : null;
-  const pageNav = current ? (
+  const showBack = showRunnerBack(index, canGoTo);
+  const showForward = showRunnerForward(index, pages.length, canGoTo, true, demoMode);
+  const showChromeNav = showBack || showForward;
+  const pageNav = current && (showChromeNav || earlyFinish) ? (
     <Stack gap="sm">
-      <Group justify="flex-end" gap="md" wrap="nowrap">
-        <Button
-          size="md"
-          variant="default"
-          disabled={index === 0 || !canGoTo(index - 1)}
-          onClick={() => go(index - 1)}
-        >
-          Back
-        </Button>
-        <Button size="md" color="iba" onClick={onChromeNext}>
-          {index < pages.length - 1 ? "Next" : "Finish"}
-        </Button>
-      </Group>
+      {showChromeNav ? (
+        <Group justify="flex-end" gap="md" wrap="nowrap">
+          {showBack ? (
+            <Button size="md" variant="default" onClick={() => go(index - 1)}>
+              Back
+            </Button>
+          ) : null}
+          {showForward ? (
+            <Button size="md" color="iba" onClick={onChromeNext}>
+              {index < pages.length - 1 ? "Next" : "Finish"}
+            </Button>
+          ) : null}
+        </Group>
+      ) : null}
       {earlyFinish}
     </Stack>
   ) : null;
@@ -998,23 +931,23 @@ export function IeltsRunner(props: TestRunnerProps) {
               alignItems: "stretch",
             }}
           >
-            <ScrollPane className="runner-reading">
+            <RunnerScrollPane className="runner-reading">
               <Stack gap="md">
                 {feedHasSideContent(sideSectionFeed) ? <ContentFeedView items={sideSectionFeed} /> : null}
                 {feedHasSideContent(sidePartFeed) ? <ContentFeedView items={sidePartFeed} /> : null}
               </Stack>
-            </ScrollPane>
-            <ScrollPane className="runner-questions">
+            </RunnerScrollPane>
+            <RunnerScrollPane className="runner-questions">
               <Stack gap={8}>
                 {scopeHeading("questions")}
                 {questionStack}
                 {pageNav}
               </Stack>
-            </ScrollPane>
+            </RunnerScrollPane>
           </Box>
         ) : null}
         {current && !splitWorkspace ? (
-          <Card maw={920} w="100%" mx="auto" shadow="sm" bg="white" style={{ flex: "none" }}>
+          <Card maw={920} w="100%" mx="auto" shadow="sm" bg="white" className="runner-task-card" style={{ flex: "none" }}>
             <Stack gap={8}>
               {scopeHeading("main")}
               {questionStack}
@@ -1042,6 +975,21 @@ export function IeltsRunner(props: TestRunnerProps) {
           </Group>
         </Stack>
       </Modal>
+      {forwardConfirm && (
+        <ConfirmDialog
+          open
+          title="Continue?"
+          confirmLabel="Continue"
+          cancelLabel="Stay"
+          onConfirm={() => {
+            setForwardConfirm(false);
+            go(index + 1);
+          }}
+          onClose={() => setForwardConfirm(false)}
+        >
+          You will not be able to return to this module after you continue.
+        </ConfirmDialog>
+      )}
       {confirming && (
         <ConfirmDialog
           open

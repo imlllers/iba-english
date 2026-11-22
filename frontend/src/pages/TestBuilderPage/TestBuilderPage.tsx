@@ -16,7 +16,7 @@ import { modals } from "@mantine/modals";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { ERROR_EXPLANATIONS_ENABLED } from "@/entities/test/settings";
+import { errorExplanationsEnabled } from "@/entities/test/settings";
 import type { Question, QuestionType } from "@/entities/question/types";
 import type { ExamTest, MaterialBlock, Section, SectionPart } from "@/entities/test/types";
 import { ApiError, errorMessage } from "@/shared/api/client";
@@ -650,7 +650,7 @@ function TestBuilderPageInner() {
             update={updateQuestion(owner, live)}
             startNumber={entry?.start ?? 1}
             examType={examType}
-            errorExplanationsEnabled={ERROR_EXPLANATIONS_ENABLED && (test.settings.errorExplanationMode ?? "off") !== "off"}
+            errorExplanationsEnabled={errorExplanationsEnabled(test.settings.examType) && (test.settings.errorExplanationMode ?? "off") !== "off"}
           />
         </Card>
         <QuestionLivePreview

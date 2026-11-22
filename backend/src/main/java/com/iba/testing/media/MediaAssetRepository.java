@@ -49,4 +49,11 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, UUID> {
     long countByAttempt(TestAttempt attempt);
 
     List<MediaAsset> findByAttempt(TestAttempt attempt);
+
+    @Query("""
+            select m from MediaAsset m
+            where m.durationSeconds is null
+              and lower(m.mimeType) like 'audio/%'
+            """)
+    List<MediaAsset> findAudioWithoutDuration();
 }

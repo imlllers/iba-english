@@ -251,11 +251,11 @@ function ShellHeaderBar({ opened, onToggle }: { opened: boolean; onToggle: () =>
         {user ? (
           <Group gap="sm" wrap="nowrap" align="center" style={{ minWidth: 0 }}>
             <UserAvatar user={user} size="md" />
-            <Stack gap={0} align="flex-start" style={{ minWidth: 0, maxWidth: 220 }}>
-              <Text size="sm" fw={600} lh="var(--mantine-line-height-sm)" truncate>
+            <Stack gap={2} align="flex-start" style={{ minWidth: 0, maxWidth: 220 }}>
+              <Text size="sm" fw={600} lh={1.3} truncate>
                 {user.displayName}
               </Text>
-              <Text size="xs" c="dimmed" truncate>
+              <Text size="xs" c="dimmed" lh={1.3} truncate>
                 {user.email}
               </Text>
             </Stack>

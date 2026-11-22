@@ -17,7 +17,7 @@ final class FileSignatures {
             case "audio/wav" -> ascii(head, 0, "RIFF") && ascii(head, 8, "WAVE");
             case "audio/ogg" -> ascii(head, 0, "OggS");
             case "audio/webm" -> starts(head, 0, new byte[]{0x1A, 0x45, (byte) 0xDF, (byte) 0xA3});
-            case "audio/mp4", "video/mp4" -> ascii(head, 4, "ftyp");
+            case "audio/mp4", "video/mp4", "video/quicktime" -> ascii(head, 4, "ftyp");
             case "video/webm" -> starts(head, 0, new byte[]{0x1A, 0x45, (byte) 0xDF, (byte) 0xA3});
             case "application/pdf" -> ascii(head, 0, "%PDF");
             default -> false;

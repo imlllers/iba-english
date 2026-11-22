@@ -2,7 +2,6 @@ import {
   Button,
   Group,
   Modal,
-  NumberInput,
   SegmentedControl,
   Stack,
   Table,
@@ -14,8 +13,9 @@ import { IconPencil } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
 import { normalizeTestSettings } from "@/entities/test/settings";
+import { limitSecondsFromSection, secondsToMmSs } from "@/shared/lib/durationMmSs";
+import { MmSsTimeInput } from "@/shared/ui/MmSsTimeInput";
 import type {
   ExamDisplayType,
   ExamTemplate,
@@ -24,9 +24,9 @@ import type {
   TestSettings,
 } from "@/entities/test/types";
 import { templatesApi } from "@/features/templates/templatesApi";
-import { EXAM_TYPE_OPTIONS, isExamTypeDisabled } from "@/entities/test/settings";
+import { EXAM_TYPE_OPTIONS } from "@/entities/test/settings";
+import { ScaleBindingField } from "@/features/score-scales/ScaleBindingCard";
 import { TestSettingsCards } from "@/features/test-builder/TestSettingsCards";
-import { testsApi } from "@/features/tests/testsApi";
 import { errorMessage } from "@/shared/api/client";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { Icon } from "@/shared/ui/Icon";
@@ -35,7 +35,6 @@ import { IconButton } from "@/shared/ui/IconButton";
 import { COL } from "@/shared/ui/tableCols";
 import { notify } from "@/shared/ui/notify";
 import { PageHeader } from "@/shared/ui/PageHeader";
-import { SaveIndicator, type SaveState } from "@/shared/ui/SaveIndicator";
 import { Select } from "@/shared/ui/Select";
 import { SettingsCard } from "@/shared/ui/SettingsCard";
 import { SettingsHint } from "@/shared/ui/SettingsHint";
@@ -48,7 +47,7 @@ const PER_PAGE_OPTIONS = [
   { value: "one", label: "По одному" },
   { value: "all", label: "Все сразу" },
 ];
-const PART_ACTION_COL = 50;
+const PART_ACTION_COL = 34;
 const PARTS_TABLE_STYLES = {
   th: { paddingLeft: 0, paddingRight: 0 },
   td: { paddingLeft: 0, paddingRight: 0 },
@@ -81,10 +80,9 @@ function toDraft(template: ExamTemplate): Draft {
 function useTemplateDraft(template: ExamTemplate | undefined) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<Draft | null>(() => (template ? toDraft(template) : null));
-  const [state, setState] = useState<SaveState>("idle");
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
   const latest = useRef<Draft | null>(draft);
-  const dirty = useRef(false);
-  const timer = useRef<number | undefined>(undefined);
   const templateRef = useRef(template);
   templateRef.current = template;
 
@@ -96,19 +94,27 @@ function useTemplateDraft(template: ExamTemplate | undefined) {
     }
   }, [template]);
 
+  const revert = useCallback(() => {
+    const source = templateRef.current;
+    if (!source) {
+      return;
+    }
+    const initial = toDraft(source);
+    latest.current = initial;
+    setDraft(initial);
+    setDirty(false);
+  }, []);
+
   const flush = useCallback(async () => {
-    window.clearTimeout(timer.current);
     const current = latest.current;
     const source = templateRef.current;
-    if (!current || !source || !dirty.current) {
+    if (!current || !source || !dirty) {
       return true;
     }
     if (!current.title.trim()) {
-      setState("error");
       return false;
     }
-    dirty.current = false;
-    setState("saving");
+    setSaving(true);
     try {
       const saved = await templatesApi.update(source.id, {
         title: current.title.trim(),
@@ -122,42 +128,36 @@ function useTemplateDraft(template: ExamTemplate | undefined) {
       });
       queryClient.setQueryData(["template", source.id], saved);
       void queryClient.invalidateQueries({ queryKey: ["templates"] });
-      setState(dirty.current ? "saving" : "saved");
+      const synced = toDraft(saved);
+      latest.current = synced;
+      setDraft(synced);
+      setDirty(false);
+      notify.success("Шаблон сохранён");
       return true;
     } catch (failure) {
-      dirty.current = true;
-      setState("error");
       notify.error(errorMessage(failure, "Не удалось сохранить шаблон"), { id: "template-save", title: "Шаблон" });
       return false;
+    } finally {
+      setSaving(false);
     }
-  }, [queryClient]);
+  }, [dirty, queryClient]);
 
-  const change = useCallback((update: (current: Draft) => Draft, delay = 600) => {
+  const change = useCallback((update: (current: Draft) => Draft) => {
     const current = latest.current;
     if (!current) {
       return;
     }
     const next = update(current);
     latest.current = next;
-    dirty.current = true;
     setDraft(next);
-    setState("saving");
-    window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => void flush(), delay);
-  }, [flush]);
-
-  useEffect(() => () => {
-    if (dirty.current) {
-      void flush();
-    }
-  }, [flush]);
-
-  const discard = useCallback(() => {
-    window.clearTimeout(timer.current);
-    dirty.current = false;
+    setDirty(true);
   }, []);
 
-  return { draft, state, change, flush, discard };
+  const discard = useCallback(() => {
+    setDirty(false);
+  }, []);
+
+  return { draft, dirty, saving, change, flush, revert, discard };
 }
 
 function sectionTypeLabel(type: SectionType): string {
@@ -188,7 +188,6 @@ export function TemplateEditor({ templateId, onRemoved, headerTarget }: {
   headerTarget?: HTMLElement | null;
 }) {
   const withHeader = (header: ReactNode) => (headerTarget ? createPortal(header, headerTarget) : header);
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["template", templateId],
@@ -197,7 +196,7 @@ export function TemplateEditor({ templateId, onRemoved, headerTarget }: {
     initialDataUpdatedAt: () => queryClient.getQueryState(["templates"])?.dataUpdatedAt,
   });
   const template = query.data;
-  const { draft, state, change, flush, discard } = useTemplateDraft(template);
+  const { draft, dirty, saving, change, flush, revert, discard } = useTemplateDraft(template);
   const [editing, setEditing] = useState<Editing>(null);
   const [removing, setRemoving] = useState(false);
   const [removingItem, setRemovingItem] = useState<{ section: number } | null>(null);
@@ -208,23 +207,6 @@ export function TemplateEditor({ templateId, onRemoved, headerTarget }: {
       discard();
       void queryClient.invalidateQueries({ queryKey: ["templates"] });
       onRemoved();
-    },
-  });
-
-  const createTest = useMutation({
-    mutationFn: async () => {
-      if (!(await flush())) {
-        throw new Error("Сначала исправьте шаблон – не удалось сохранить");
-      }
-      return testsApi.create({ title: draft?.title.trim() || "Новый тест", description: "", templateId });
-    },
-    onSuccess: (test) => {
-      queryClient.setQueryData(["test", test.id], test);
-      void queryClient.invalidateQueries({ queryKey: ["tests"] });
-      navigate(`/teacher/tests/${test.id}`);
-    },
-    onError: (failure) => {
-      notify.error(errorMessage(failure, "Не удалось создать тест"), { title: "Новый тест" });
     },
   });
 
@@ -247,12 +229,14 @@ export function TemplateEditor({ templateId, onRemoved, headerTarget }: {
     );
   }
 
+  const canSave = dirty && Boolean(draft.title.trim());
+
   const examType: ExamDisplayType = template.builtin
     ? (template.family as ExamDisplayType)
     : draft.settings.examType ?? "CUSTOM";
 
   const patchSettings = (patch: Partial<TestSettings>) =>
-    change((current) => ({ ...current, settings: { ...current.settings, ...patch } }), 0);
+    change((current) => ({ ...current, settings: { ...current.settings, ...patch } }));
 
   const saveSection = (index: number | "new", next: PresetSectionSkeleton) => {
     change((current) => ({
@@ -260,7 +244,7 @@ export function TemplateEditor({ templateId, onRemoved, headerTarget }: {
       sections: index === "new"
         ? [...current.sections, next]
         : current.sections.map((item, i) => (i === index ? next : item)),
-    }), 0);
+    }));
     setEditing(null);
   };
 
@@ -268,7 +252,7 @@ export function TemplateEditor({ templateId, onRemoved, headerTarget }: {
     if (draft.sections.length <= 1) {
       return;
     }
-    change((current) => ({ ...current, sections: current.sections.filter((_, i) => i !== index) }), 0);
+    change((current) => ({ ...current, sections: current.sections.filter((_, i) => i !== index) }));
   };
 
   return (
@@ -277,42 +261,41 @@ export function TemplateEditor({ templateId, onRemoved, headerTarget }: {
       <PageHeader
         title="Шаблоны тестов"
         actions={
-          <>
-            <SaveIndicator state={state} />
+          <Group gap="md" wrap="nowrap">
             {!template.builtin ? (
               <Button variant="subtle" color="red" leftSection={<Icon name="trash" />} onClick={() => setRemoving(true)}>
                 Удалить
               </Button>
             ) : null}
-            <Button
-              leftSection={<Icon name="plus" />}
-              loading={createTest.isPending}
-              disabled={isExamTypeDisabled(examType)}
-              onClick={() => createTest.mutate()}
-            >
-              Создать тест
+            {dirty ? (
+              <Button variant="subtle" color="gray" onClick={revert}>
+                Отменить
+              </Button>
+            ) : null}
+            <Button disabled={!canSave} loading={saving} onClick={() => void flush()}>
+              Сохранить
             </Button>
-          </>
+          </Group>
         }
       />
       )}
 
       <SettingsCard>
         <Stack gap="xs">
-          <SettingsSectionTitle>Основное</SettingsSectionTitle>
+          <SettingsSectionTitle>О тесте</SettingsSectionTitle>
+          <TextInput
+            label="Название"
+            withAsterisk
+            value={draft.title}
+            maxLength={200}
+            placeholder="Введите название"
+            error={draft.title.trim() ? undefined : "Укажите название шаблона"}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              change((current) => ({ ...current, title: value }));
+            }}
+          />
           <Group gap="md" wrap="nowrap" align="flex-start" grow>
-            <TextInput
-              label="Название"
-              withAsterisk
-              value={draft.title}
-              maxLength={200}
-              placeholder="Введите название"
-              error={draft.title.trim() ? undefined : "Укажите название шаблона"}
-              onChange={(event) => {
-                const value = event.currentTarget.value;
-                change((current) => ({ ...current, title: value }), 800);
-              }}
-            />
             <Select
               label="Тип теста"
               withAsterisk
@@ -320,6 +303,18 @@ export function TemplateEditor({ templateId, onRemoved, headerTarget }: {
               options={EXAM_TYPE_OPTIONS}
               disabled={template.builtin}
               onChange={(value) => patchSettings({ examType: (value as ExamDisplayType) || "CUSTOM" })}
+            />
+            <ScaleBindingField
+              value={draft.settings.scoreScale}
+              examType={examType}
+              examPreset={template.builtinKey}
+              targets={draft.sections.map((section, index) => ({
+                key: String(index),
+                title: section.title || `Секция ${index + 1}`,
+                sectionType: section.sectionType,
+                binding: { sectionIndex: index },
+              }))}
+              onChange={(scoreScale) => patchSettings({ scoreScale })}
             />
           </Group>
         </Stack>
@@ -348,7 +343,9 @@ export function TemplateEditor({ templateId, onRemoved, headerTarget }: {
                   </Table.Td>
                   <Table.Td fz="md">{sectionTypeLabel(item.sectionType)}</Table.Td>
                   <Table.Td fz="md">{partsSummary(item)}</Table.Td>
-                  <Table.Td ta="center" fz="md">{item.timeLimitMinutes ? `${item.timeLimitMinutes} мин` : "–"}</Table.Td>
+                  <Table.Td ta="center" fz="md">
+                    {limitSecondsFromSection(item) > 0 ? secondsToMmSs(limitSecondsFromSection(item)) : "–"}
+                  </Table.Td>
                   <Table.Td>
                     <Group gap="md" wrap="nowrap" justify="center">
                       <IconButton size="lg" variant="subtle" color="gray" label="Изменить секцию" onClick={() => setEditing(index)}>
@@ -383,16 +380,7 @@ export function TemplateEditor({ templateId, onRemoved, headerTarget }: {
         </Stack>
       </SettingsCard>
 
-      <TestSettingsCards
-        settings={{ ...draft.settings, examType }}
-        onChange={patchSettings}
-        scaleTargets={draft.sections.map((section, index) => ({
-          key: String(index),
-          title: section.title || `Секция ${index + 1}`,
-          sectionType: section.sectionType,
-          binding: { sectionIndex: index },
-        }))}
-      />
+      <TestSettingsCards settings={{ ...draft.settings, examType }} onChange={patchSettings} />
 
       {editing !== null && (
         <SectionDialog
@@ -471,7 +459,7 @@ function SectionDialog({ section, creating, settings, onClose, onSave }: {
       opened
       onClose={onClose}
       title={creating ? "Новая секция" : `Секция ${section.title}`}
-      size="calc(4 * var(--grid-col) + 3 * var(--grid-gutter))"
+      size="var(--grid-cols-span-4-width)"
       centered
     >
       <Stack gap="md">
@@ -492,26 +480,27 @@ function SectionDialog({ section, creating, settings, onClose, onSave }: {
           options={SECTION_TYPES}
           onChange={(value) => patch({ sectionType: (value as SectionType) || "CUSTOM" })}
         />
-        <NumberInput
-          hideControls
-          label="Лимит времени, мин"
+        <MmSsTimeInput
+          label="Лимит времени, мм:сс"
           placeholder="Без ограничения"
-          value={draft.timeLimitMinutes ?? ""}
-          min={0}
-          max={600}
-          allowDecimal={false}
-          onChange={(value) => patch({ timeLimitMinutes: typeof value === "number" && value > 0 ? value : null })}
+          totalSeconds={limitSecondsFromSection(draft)}
+          onCommit={(seconds) => {
+            patch({
+              timeLimitMinutes: null,
+              timeLimitSeconds: seconds,
+            } as Partial<typeof draft>);
+          }}
         />
-            <Switch
-              label="Можно возвращаться к заданиям в секции"
-              checked={draft.allowBackToQuestions ?? settings.allowBackToQuestions ?? true}
-              onChange={(checked) => patch({ allowBackToQuestions: checked })}
-            />
-            <Switch
-              label="Можно возвращаться к частям в секции"
-              checked={draft.allowBackToPart ?? settings.allowBackToPart ?? true}
-              onChange={(checked) => patch({ allowBackToPart: checked })}
-            />
+        <Switch
+          label="Можно возвращаться к заданиям в секции"
+          checked={draft.allowBackToQuestions ?? settings.allowBackToQuestions ?? true}
+          onChange={(checked) => patch({ allowBackToQuestions: checked })}
+        />
+        <Switch
+          label="Можно возвращаться к частям в секции"
+          checked={draft.allowBackToPart ?? settings.allowBackToPart ?? true}
+          onChange={(checked) => patch({ allowBackToPart: checked })}
+        />
 
         <Stack gap={4}>
           <Text size="md" fw={700}>Части</Text>
@@ -546,12 +535,10 @@ function SectionDialog({ section, creating, settings, onClose, onSave }: {
                         />
                       </Group>
                     </Table.Td>
-                    <Table.Td>
-                      <Group justify="flex-end">
-                        <IconButton size="lg" variant="subtle" color="gray" label="Удалить часть" onClick={() => setParts((current) => current.filter((item) => item.id !== part.id))}>
-                          <Icon name="close" size={20} />
-                        </IconButton>
-                      </Group>
+                    <Table.Td w={PART_ACTION_COL}>
+                      <IconButton size="lg" variant="subtle" color="gray" label="Удалить часть" onClick={() => setParts((current) => current.filter((item) => item.id !== part.id))}>
+                        <Icon name="close" size={20} />
+                      </IconButton>
                     </Table.Td>
                   </Table.Tr>
                 ))}

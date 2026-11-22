@@ -76,6 +76,20 @@ class QuestionEnginesTest {
     }
 
     @Test
+    void toeflSpeakingWithoutMaxSecondsCanPublish() {
+        ObjectNode question = template(QuestionType.SPEAKING_RECORDING);
+        ((ObjectNode) question.path("settings")).remove("maxSeconds");
+        engines.validate(draft(question), ContentCheck.publication("TOEFL"));
+    }
+
+    @Test
+    void nonToeflSpeakingRequiresMaxSecondsOnPublish() {
+        ObjectNode question = template(QuestionType.SPEAKING_RECORDING);
+        ((ObjectNode) question.path("settings")).remove("maxSeconds");
+        assertThrows(ApiException.class, () -> engines.validate(draft(question), ContentCheck.publication("IELTS")));
+    }
+
+    @Test
     void draftRejectsBrokenStructure() {
         ObjectNode question = template(QuestionType.MATCHING);
         ((ObjectNode) question.path("options")).put("left", "not a list");
