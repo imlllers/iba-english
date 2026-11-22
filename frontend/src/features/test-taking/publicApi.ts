@@ -27,8 +27,25 @@ export const publicApi = {
     ),
   startPart: (attemptToken: string, partId: string) =>
     api<{ endsAt: string | null }>(`/api/public/attempts/${attemptToken}/parts/${partId}/start`, json("POST")),
+  pausePart: (
+    attemptToken: string,
+    partId: string,
+    body?: { audioKey?: string; durationSeconds?: number },
+  ) =>
+    api<{ endsAt: string }>(
+      `/api/public/attempts/${attemptToken}/parts/${partId}/pause`,
+      json("POST", body ?? {}),
+    ),
+  markReadingStart: (attemptToken: string, questionId: string) =>
+    api<{ saved: boolean }>(`/api/public/attempts/${attemptToken}/questions/${questionId}/reading-start`, json("POST")),
+  markReadingDone: (attemptToken: string, questionId: string) =>
+    api<{ saved: boolean }>(`/api/public/attempts/${attemptToken}/questions/${questionId}/reading-done`, json("POST")),
+  resumePart: (attemptToken: string, partId: string) =>
+    api<{ endsAt: string }>(`/api/public/attempts/${attemptToken}/parts/${partId}/resume`, json("POST")),
   startQuestion: (attemptToken: string, questionId: string) =>
     api<{ endsAt: string | null }>(`/api/public/attempts/${attemptToken}/questions/${questionId}/start`, json("POST")),
+  markAudioDone: (attemptToken: string, key: string) =>
+    api<{ saved: boolean }>(`/api/public/attempts/${attemptToken}/audio-done`, json("POST", { key })),
   submit: (attemptToken: string) => api<ParticipantResult>(`/api/public/attempts/${attemptToken}/submit`, json("POST")),
   result: (attemptToken: string) => api<ParticipantResult>(`/api/public/attempts/${attemptToken}/result`),
   uploadRecording: (attemptToken: string, file: Blob, name: string) =>

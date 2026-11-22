@@ -9,6 +9,7 @@ export function EmptyState({ title, children, action }: { title: string; childre
       shadow="sm"
       px="md"
       py={48}
+      w="100%"
       style={{
         display: "flex",
         alignItems: "center",

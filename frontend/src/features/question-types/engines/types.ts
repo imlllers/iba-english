@@ -18,8 +18,12 @@ export type PlayerProps = {
   readOnly: boolean;
   startNumber?: number;
   numberFormat?: QuestionNumberFormat;
+  examType?: ExamDisplayType;
   hideBlankNumbers?: boolean;
   parenLetters?: boolean;
+  hideWordCount?: boolean;
+  showWordCountToggle?: boolean;
+  onToggleWordCount?: () => void;
 };
 
 export type EngineUi = {

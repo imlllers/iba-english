@@ -5,7 +5,7 @@ export type TestStatus = "DRAFT" | "PUBLISHED";
 export type AccessStatus = "DRAFT" | "SCHEDULED" | "OPEN" | "CLOSED";
 export type SectionType = "LISTENING" | "READING" | "WRITING" | "SPEAKING" | "CUSTOM";
 
-export type ResultDetail = "score_only" | "score_and_review";
+export type ResultDetail = "score_only" | "sections_only" | "score_and_scale";
 
 export type ErrorExplanationMode = "off" | "during" | "after" | "both";
 
@@ -24,6 +24,7 @@ export type TestSettings = {
   shuffleChoices: boolean;
   focusLossMaxWarnings: number | null;
   audioAutoStart: boolean;
+  videoAutoStart: boolean;
   questionNumberFormat: QuestionNumberFormat;
   questionNumberScope: QuestionNumberScope;
   examType: ExamDisplayType;
@@ -36,10 +37,10 @@ export type TestSettings = {
   timeLimitSectionTypes?: SectionType[] | null;
   allowEarlySubmit?: boolean;
   autoAdvanceOnQuestionTimeout?: boolean;
-  listeningAnswerSeconds?: number | null;
+  autoAdvanceOnPartTimeout?: boolean;
+  pausePartTimerDuringAudio?: boolean;
   availableFrom: string | null;
   availableUntil: string | null;
-  showLevelToParticipant: boolean;
   emailResultToParticipant: boolean;
   scoreScale: TestScoreScale | null;
 };
@@ -58,7 +59,9 @@ export type SectionPart = {
   instructions: string;
   items?: ContentItem[];
   timeLimitMinutes?: number | null;
+  timeLimitSeconds?: number | null;
   oneQuestionPerPage?: boolean | null;
+  autoAdvanceOnTimeout?: boolean | null;
   orderIndex: number;
 };
 
@@ -82,8 +85,10 @@ export type Section = {
   orderIndex: number;
   sectionType: SectionType;
   timeLimitMinutes: number | null;
+  timeLimitSeconds?: number | null;
   allowBackToQuestions?: boolean | null;
   allowBackToPart?: boolean | null;
+  speakingAutoFlow?: boolean | null;
   parts?: SectionPart[];
   materialBlocks?: MaterialBlock[];
   questions: Question[];
@@ -117,6 +122,7 @@ export type PresetSectionSkeleton = {
   title: string;
   sectionType: SectionType;
   timeLimitMinutes: number | null;
+  timeLimitSeconds?: number | null;
   instructions: string;
   allowBackToQuestions?: boolean | null;
   allowBackToPart?: boolean | null;

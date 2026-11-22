@@ -92,7 +92,7 @@ describe("question players", () => {
     expect(onAnswer).toHaveBeenCalledWith({ order: ["y", "x"] });
   });
 
-  it("ordering slots place a bank word into a gap", () => {
+  it("ordering slots do not place a word via click", () => {
     const onAnswer = vi.fn();
     const options = {
       presentation: "slots" as const,
@@ -106,10 +106,37 @@ describe("question players", () => {
       joiner: " ",
     };
     renderPlayer(<QuestionPlayer question={question("ORDER_SENTENCES", options)} kicker="1" answer={{}} onAnswer={onAnswer} />);
-    fireEvent.click(screen.getByRole("button", { name: "Drag “tour guides”" }));
+    fireEvent.click(screen.getByLabelText("Drag “tour guides”"));
     fireEvent.click(screen.getByLabelText("Slot 1, empty"));
-    expect(onAnswer).toHaveBeenCalledWith({ order: ["a", null] });
+    expect(onAnswer).not.toHaveBeenCalled();
     expect(isAnswered(question("ORDER_SENTENCES", options), { order: ["a", null] })).toBe(true);
+  });
+
+  it("TOEFL gapped text does not show a Questions range", () => {
+    const gapped = question("GAPPED_TEXT", {});
+    gapped.promptContent = {
+      type: "doc",
+      content: [{
+        type: "paragraph",
+        content: [
+          { type: "text", text: "The cat is " },
+          { type: "blank", attrs: { id: "b1" } },
+          { type: "text", text: " and " },
+          { type: "blank", attrs: { id: "b2" } },
+        ],
+      }],
+    };
+    renderPlayer(
+      <QuestionPlayer
+        question={gapped}
+        kicker="1-2"
+        startNumber={1}
+        examType="TOEFL"
+        answer={{}}
+        onAnswer={() => undefined}
+      />,
+    );
+    expect(screen.queryByText(/Questions/)).toBeNull();
   });
 
   it("read-only players do not accept input", () => {

@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 import type { ContentItem, ContentKind } from "@/entities/question/types";
 import { MediaPicker } from "@/features/media-library/MediaPicker";
 import { AppAudio } from "@/shared/ui/AppAudio";
+import { VideoPlayer } from "@/shared/ui/VideoPlayer";
 import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { Icon } from "@/shared/ui/Icon";
 import { IconButton } from "@/shared/ui/IconButton";
@@ -108,15 +109,9 @@ export function ContentFeedEditor({
                 <AppAudio src={media.asset(item.mediaId)} maw={360} style={{ flex: 1, minWidth: 0 }} aria-label="Аудиозапись" />
               )}
               {item.kind === "video" && (
-                <Box
-                  component="video"
-                  src={media.asset(item.mediaId)}
-                  controls
-                  preload="metadata"
-                  w={160}
-                  h={64}
-                  style={{ display: "block", objectFit: "cover", borderRadius: "var(--mantine-radius-md)", background: "var(--mantine-color-dark-9)" }}
-                />
+                <Box style={{ flex: 1, minWidth: 0, maxWidth: 480 }}>
+                  <VideoPlayer src={media.asset(item.mediaId)} aria-label="Видео" />
+                </Box>
               )}
               <Button variant="subtle" size="compact-sm" onClick={() => setPicking(item)}>Заменить</Button>
             </Group>

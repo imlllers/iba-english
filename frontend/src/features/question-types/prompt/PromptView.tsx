@@ -87,14 +87,13 @@ export function PromptView({ doc, renderBlank, markers = false, startNumber = 1 
         return <pre key={key}>{body}</pre>;
       case "table":
         return (
-          <Box key={key} style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody>{children}</tbody></table>
+          <Box key={key} className="iba-prompt-table-wrap">
+            <table className="iba-prompt-table"><tbody>{children}</tbody></table>
           </Box>
         );
       case "tableRow":
         return <tr key={key}>{children}</tr>;
       case "tableHeader":
-        return <th key={key} colSpan={span(node.attrs?.colspan)} rowSpan={span(node.attrs?.rowspan)} style={{ border: "1px solid var(--mantine-color-gray-3)", padding: "6px 8px", background: "var(--mantine-color-gray-0)" }}>{body}</th>;
       case "tableCell":
         return <td key={key} colSpan={span(node.attrs?.colspan)} rowSpan={span(node.attrs?.rowspan)} style={{ border: "1px solid var(--mantine-color-gray-3)", padding: "6px 8px", verticalAlign: "top" }}>{body}</td>;
       default:
@@ -103,7 +102,7 @@ export function PromptView({ doc, renderBlank, markers = false, startNumber = 1 
   };
 
   return (
-    <Box className="iba-prompt" style={{ fontWeight: 500 }}>
+    <Box className="iba-prompt">
       {(doc?.content ?? []).map((node, index) => render(node, index))}
     </Box>
   );

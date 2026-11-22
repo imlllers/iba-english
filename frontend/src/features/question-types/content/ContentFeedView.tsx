@@ -4,7 +4,9 @@ import type { ContentItem } from "@/entities/question/types";
 import { LimitedAudio } from "../media/LimitedAudio";
 import { useMedia } from "../media/MediaContext";
 import { PromptView } from "../prompt/PromptView";
+import { VideoPlayer } from "@/shared/ui/VideoPlayer";
 import { contentItemFilled } from "./contentItems";
+import { TASK_MEDIA_MAX, TASK_MEDIA_ROW } from "./taskMediaLayout";
 
 export type ExamAudioBinding = {
   keyFor: (item: ContentItem) => string | null;
@@ -14,6 +16,8 @@ export type ExamAudioBinding = {
   activeKey: string | null;
   remountToken?: number;
   onEnded: (key: string) => void;
+  onStarted?: (key: string) => void;
+  onDurationKnown?: (key: string) => void;
   onAutoPlayBlocked?: () => void;
   hidden?: boolean;
 };
@@ -27,6 +31,10 @@ type ContentFeedViewProps = {
   playbackLimit?: number;
   playbackKey?: string;
   examAudio?: ExamAudioBinding;
+  hideAudio?: boolean;
+  autoPlayVideo?: boolean;
+  hideVideoControls?: boolean;
+  teacherReview?: boolean;
 };
 
 export function ContentFeedView({
@@ -36,6 +44,10 @@ export function ContentFeedView({
   playbackLimit = 0,
   playbackKey,
   examAudio,
+  hideAudio = false,
+  autoPlayVideo = false,
+  hideVideoControls = false,
+  teacherReview = false,
 }: ContentFeedViewProps) {
   const media = useMedia();
   const visible = items.filter((item) => (item.id === promptId ? Boolean(renderPrompt) : contentItemFilled(item)));
@@ -53,25 +65,37 @@ export function ContentFeedView({
           return <PromptView key={item.id} doc={item.doc ?? { type: "doc" }} />;
         }
         const src = media.asset(item.mediaId!);
+        if (teacherReview && (item.kind === "image" || item.kind === "audio" || item.kind === "video")) {
+          return null;
+        }
         if (item.kind === "image") {
           return (
-            <Box key={item.id} style={{ display: "flex", justifyContent: "center", width: "100%" }}>
-              <Image src={src} alt="Task material" maw={480} radius="sm" />
+            <Box key={item.id} className="iba-task-media" style={TASK_MEDIA_ROW}>
+              <Image
+                src={src}
+                alt="Task material"
+                radius="sm"
+                fit="contain"
+                w="auto"
+                h="auto"
+                style={TASK_MEDIA_MAX}
+              />
             </Box>
           );
         }
+        if (item.kind === "audio" && hideAudio) {
+          return null;
+        }
         if (item.kind === "video") {
           return (
-            <Box key={item.id} style={{ display: "flex", justifyContent: "center", width: "100%" }}>
-              <Box
-                component="video"
+            <Box key={item.id} className="iba-task-media" style={TASK_MEDIA_ROW}>
+              <VideoPlayer
                 src={src}
-                controls
-                preload="metadata"
                 aria-label="Task video"
-                maw="100%"
-                mah={360}
-                style={{ display: "block" }}
+                autoPlay={autoPlayVideo}
+                seekable={!hideVideoControls}
+                controlsHidden={hideVideoControls}
+                style={{ width: "100%", ...TASK_MEDIA_MAX }}
               />
             </Box>
           );
@@ -81,6 +105,7 @@ export function ContentFeedView({
         return (
           <Box
             key={gateKey && gateKey === examAudio?.activeKey ? `${item.id}-${examAudio.remountToken ?? 0}` : item.id}
+            data-exam-audio-key={gateKey ?? undefined}
             style={gateKey && examAudio?.hidden ? HIDDEN_PLAYER : { display: "flex", justifyContent: "center", width: "100%" }}
           >
             <LimitedAudio
@@ -93,6 +118,8 @@ export function ContentFeedView({
               autoPlay={Boolean(locked && examAudio?.autoPlay && gateKey === examAudio.activeKey)}
               completed={Boolean(gateKey && examAudio?.completed.has(gateKey))}
               onEnded={gateKey && examAudio ? () => examAudio.onEnded(gateKey) : undefined}
+              onStarted={gateKey && examAudio?.onStarted ? () => examAudio.onStarted!(gateKey) : undefined}
+              onDurationKnown={gateKey && examAudio?.onDurationKnown ? () => examAudio.onDurationKnown!(gateKey) : undefined}
               onAutoPlayBlocked={examAudio?.onAutoPlayBlocked}
             />
           </Box>

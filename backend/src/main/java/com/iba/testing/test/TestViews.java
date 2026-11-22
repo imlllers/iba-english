@@ -66,12 +66,8 @@ public class TestViews {
         for (JsonNode section : snapshot.path("sections")) {
             ObjectNode copy = ((ObjectNode) section).deepCopy();
             ArrayNode questionsNode = mapper.createArrayNode();
-            int listeningSeconds = ListeningTiming.seconds(settings, section.path("sectionType").asText(""));
             for (JsonNode question : copy.path("questions")) {
                 ObjectNode publicQuestion = engines.publicQuestion(question);
-                if (listeningSeconds > 0 && publicQuestion.get("settings") instanceof ObjectNode questionSettings) {
-                    questionSettings.put("timeLimitSeconds", listeningSeconds);
-                }
                 if (shuffleChoices) {
                     shuffleChoiceOptions(publicQuestion);
                 }
@@ -146,8 +142,14 @@ public class TestViews {
             } else {
                 node.put("timeLimitMinutes", section.getTimeLimitMinutes());
             }
+            if (section.getTimeLimitSeconds() == null) {
+                node.putNull("timeLimitSeconds");
+            } else {
+                node.put("timeLimitSeconds", section.getTimeLimitSeconds());
+            }
             putNullableBoolean(node, "allowBackToQuestions", section.getAllowBackToQuestions());
             putNullableBoolean(node, "allowBackToPart", section.getAllowBackToPart());
+            putNullableBoolean(node, "speakingAutoFlow", section.getSpeakingAutoFlow());
             ArrayNode partNodes = node.putArray("parts");
             for (SectionPart part : parts.findBySectionOrderByOrderIndexAsc(section)) {
                 partNodes.add(partNode(part));
@@ -176,7 +178,13 @@ public class TestViews {
         } else {
             node.put("timeLimitMinutes", part.getTimeLimitMinutes());
         }
+        if (part.getTimeLimitSeconds() == null) {
+            node.putNull("timeLimitSeconds");
+        } else {
+            node.put("timeLimitSeconds", part.getTimeLimitSeconds());
+        }
         putNullableBoolean(node, "oneQuestionPerPage", part.getOneQuestionPerPage());
+        putNullableBoolean(node, "autoAdvanceOnTimeout", part.getAutoAdvanceOnTimeout());
         node.put("orderIndex", part.getOrderIndex());
         return node;
     }
@@ -247,6 +255,10 @@ public class TestViews {
         node.put("allowBackToSection", settings.path("allowBackToSection").asBoolean(true));
         node.put("shuffleChoices", settings.path("shuffleChoices").asBoolean(false));
         node.put("audioAutoStart", settings.path("audioAutoStart").asBoolean(false));
+        boolean videoAutoStart = settings.has("videoAutoStart")
+                ? settings.path("videoAutoStart").asBoolean(false)
+                : settings.path("audioAutoStart").asBoolean(false);
+        node.put("videoAutoStart", videoAutoStart);
         String numberFormat = settings.path("questionNumberFormat").asText("1");
         if (!numberFormat.equals("1")
                 && !numberFormat.equals("1.")
@@ -298,6 +310,10 @@ public class TestViews {
         } else {
             node.putNull("timeLimitMinutes");
         }
+        node.put("allowEarlySubmit", settings.path("allowEarlySubmit").asBoolean(true));
+        node.put("autoAdvanceOnQuestionTimeout", settings.path("autoAdvanceOnQuestionTimeout").asBoolean(false));
+        node.put("autoAdvanceOnPartTimeout", settings.path("autoAdvanceOnPartTimeout").asBoolean(false));
+        node.put("pausePartTimerDuringAudio", settings.path("pausePartTimerDuringAudio").asBoolean(false));
         copyText(node, settings, "availableFrom");
         copyText(node, settings, "availableUntil");
         return node;

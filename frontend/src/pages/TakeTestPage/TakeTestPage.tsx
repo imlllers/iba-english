@@ -6,7 +6,10 @@ import type { PublicTest } from "@/entities/test/types";
 import { MediaProvider, type MediaResolver } from "@/features/question-types/media/MediaContext";
 import { TestIntro } from "@/features/test-taking/TestIntro";
 import { TestRunner } from "@/features/test-taking/TestRunner";
+import { partLimitSeconds } from "@/features/test-taking/partTiming";
+import { limitSecondsFromSection } from "@/shared/lib/durationMmSs";
 import { attemptMediaUrl, publicApi } from "@/features/test-taking/publicApi";
+import { waitForSpeakingUploads } from "@/features/question-types/engines/speaking/speakingUploadQueue";
 import { useAnswerSaver } from "@/features/test-taking/useAnswerSaver";
 import { ApiError } from "@/shared/api/client";
 import { Loading } from "@/shared/ui/Loading";
@@ -27,11 +30,15 @@ export function TakeTestPage() {
   const [sectionEnds, setSectionEnds] = useState<Record<string, string | null>>({});
   const [partEnds, setPartEnds] = useState<Record<string, string | null>>({});
   const [questionEnds, setQuestionEnds] = useState<Record<string, string | null>>({});
+  const [audioDone, setAudioDone] = useState<string[]>([]);
+  const [readingStarted, setReadingStarted] = useState<Record<string, string>>({});
+  const [readingDone, setReadingDone] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const entered = useRef(new Set<string>());
   const enteredParts = useRef(new Set<string>());
   const enteredQuestions = useRef(new Set<string>());
+  const partPauseKey = useRef(new Map<string, string>());
   const submitted = useRef(false);
   const token = running?.token ?? null;
   const previous = localStorage.getItem(resultKey(publicToken));
@@ -71,6 +78,10 @@ export function TakeTestPage() {
   }, [token, submit]);
 
   const saver = useAnswerSaver(token, onFinal);
+  const persistAnswers = useCallback(async () => {
+    await waitForSpeakingUploads();
+    return saver.flush();
+  }, [saver]);
 
   useEffect(() => {
     const stored = localStorage.getItem(attemptKey(publicToken));
@@ -86,6 +97,9 @@ export function TakeTestPage() {
           expiresAt: attempt.expiresAt,
           blockEndsAt: attempt.blockEndsAt ?? null,
         });
+        setAudioDone(attempt.audioDone ?? []);
+        setReadingStarted(attempt.reading?.started ?? {});
+        setReadingDone(attempt.reading?.done ?? []);
         setResuming(false);
       },
       (failure: unknown) => {
@@ -115,13 +129,14 @@ export function TakeTestPage() {
       && Boolean(running.test.settings.timeLimitMinutes)
       && section != null
       && blockTypes.includes(section.sectionType);
-    if (!section?.timeLimitMinutes && !needsBlock) {
+    const sectionLimit = section ? limitSecondsFromSection(section) : 0;
+    if (sectionLimit <= 0 && !needsBlock) {
       return;
     }
     entered.current.add(sectionId);
     publicApi.startSection(running.token, sectionId).then(
       (result) => {
-        if (section?.timeLimitMinutes) {
+        if (sectionLimit > 0) {
           setSectionEnds((current) => ({ ...current, [sectionId]: result.endsAt }));
         }
         if (result.blockEndsAt) {
@@ -137,13 +152,37 @@ export function TakeTestPage() {
       return;
     }
     const part = running.test.sections.flatMap((section) => section.parts ?? []).find((item) => item.id === partId);
-    if (!part?.timeLimitMinutes) {
+    if (partLimitSeconds(part) <= 0) {
       return;
     }
     enteredParts.current.add(partId);
     publicApi.startPart(running.token, partId).then(
       (result) => setPartEnds((current) => ({ ...current, [partId]: result.endsAt })),
       () => enteredParts.current.delete(partId),
+    );
+  }, [running]);
+
+  const pausePart = useCallback((partId: string, meta?: { audioKey: string; durationSeconds?: number }) => {
+    if (!running || !meta?.audioKey) {
+      return;
+    }
+    if (partPauseKey.current.get(partId) === meta.audioKey) {
+      return;
+    }
+    partPauseKey.current.set(partId, meta.audioKey);
+    publicApi.pausePart(running.token, partId, meta).then(
+      (result) => setPartEnds((current) => ({ ...current, [partId]: result.endsAt })),
+      () => undefined,
+    );
+  }, [running]);
+
+  const resumePart = useCallback((partId: string) => {
+    if (!running || !partPauseKey.current.has(partId)) {
+      return;
+    }
+    partPauseKey.current.delete(partId);
+    publicApi.resumePart(running.token, partId).then(
+      (result) => setPartEnds((current) => ({ ...current, [partId]: result.endsAt })),
     );
   }, [running]);
 
@@ -180,6 +219,9 @@ export function TakeTestPage() {
         expiresAt: attempt.expiresAt,
         blockEndsAt: attempt.blockEndsAt ?? null,
       });
+      setAudioDone(attempt.audioDone ?? []);
+      setReadingStarted(attempt.reading?.started ?? {});
+      setReadingDone(attempt.reading?.done ?? []);
     } catch (failure) {
       setStartError(failure instanceof ApiError && failure.status < 500 ? "This test cannot be started. Check the details and try again" : "Could not start the test. Check your connection and try again");
     } finally {
@@ -202,15 +244,38 @@ export function TakeTestPage() {
           questionEnds={questionEnds}
           onEnterSection={enterSection}
           onEnterPart={enterPart}
+          onPausePart={pausePart}
+          onResumePart={resumePart}
           onEnterQuestions={enterQuestions}
           submitting={submitting}
           submitError={submitError}
           attemptToken={running.token}
           focusLossStorageKey={`iba-focus-loss:${running.token}`}
           pageStorageKey={`iba-page:${running.token}`}
-          onExpire={() => void saver.flush().finally(() => void submit(running.token))}
-          onFocusLossExhausted={() => void saver.flush().finally(() => void submit(running.token))}
-          onSubmit={() => void saver.flush().then((saved) => saved
+          initialAudioDone={audioDone}
+          onPersistAudioDone={(key) => {
+            if (running.token) {
+              void publicApi.markAudioDone(running.token, key);
+            }
+          }}
+          initialReadingStarted={readingStarted}
+          initialReadingDone={readingDone}
+          onPersistReadingStart={(questionId) => {
+            if (readingStarted[questionId]) {
+              return;
+            }
+            const stamp = new Date().toISOString();
+            setReadingStarted((prev) => ({ ...prev, [questionId]: stamp }));
+            void publicApi.markReadingStart(running.token, questionId);
+          }}
+          onPersistReadingDone={(questionId) => {
+            setReadingDone((prev) => (prev.includes(questionId) ? prev : [...prev, questionId]));
+            void publicApi.markReadingDone(running.token, questionId);
+          }}
+          onExpire={() => void persistAnswers().finally(() => void submit(running.token))}
+          onFocusLossExhausted={() => void persistAnswers().finally(() => void submit(running.token))}
+          flushAnswers={persistAnswers}
+          onSubmit={() => void persistAnswers().then((saved) => saved
             ? submit(running.token)
             : setSubmitError("Not all answers were saved. Check your internet connection and press “Submit” again"))}
         />

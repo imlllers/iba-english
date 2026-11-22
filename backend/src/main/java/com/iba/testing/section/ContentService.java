@@ -10,6 +10,7 @@ import com.iba.testing.question.QuestionWriteRequest;
 import com.iba.testing.question.engine.ContentCheck;
 import com.iba.testing.question.engine.ContentNodes;
 import com.iba.testing.question.engine.QuestionDraft;
+import com.iba.testing.preset.ToeflQuestionDefaults;
 import com.iba.testing.question.engine.QuestionEngines;
 import com.iba.testing.test.ExamAccess;
 import com.iba.testing.test.ExamTest;
@@ -61,9 +62,9 @@ public class ContentService {
     }
 
     @Transactional
-    public ObjectNode updateSection(UUID ownerId, UUID testId, UUID sectionId, SectionWriteRequest request) {
+    public ObjectNode updateSection(UUID ownerId, UUID testId, UUID sectionId, SectionWriteRequest request, JsonNode body) {
         ExamTest test = editable(ownerId, testId);
-        apply(requireSection(test, sectionId), request);
+        applyUpdate(requireSection(test, sectionId), request, body);
         touch(test);
         return tests.detail(test);
     }
@@ -112,18 +113,16 @@ public class ContentService {
     }
 
     @Transactional
-    public ObjectNode updatePart(UUID ownerId, UUID testId, UUID sectionId, UUID partId, PartWriteRequest request) {
+    public ObjectNode updatePart(UUID ownerId, UUID testId, UUID sectionId, UUID partId, PartWriteRequest request, JsonNode body) {
         ExamTest test = editable(ownerId, testId);
         SectionPart part = requirePart(test, sectionId, partId);
         part.setTitle(request.title().trim());
         part.setInstructions(request.instructions() == null ? "" : request.instructions().trim());
-        if (request.timeLimitMinutes() != null) {
-            if (request.timeLimitMinutes() < 0 || request.timeLimitMinutes() > 600) {
-                throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION", "Лимит части – от 0 до 600 минут");
-            }
-            part.setTimeLimitMinutes(request.timeLimitMinutes() == 0 ? null : request.timeLimitMinutes());
+        TimeLimits.applyPatch(body, request.timeLimitSeconds(), request.timeLimitMinutes(),
+                part::setTimeLimitSeconds, part::setTimeLimitMinutes);
+        if (RequestFields.present(body, "oneQuestionPerPage")) {
+            part.setOneQuestionPerPage(request.oneQuestionPerPage());
         }
-        part.setOneQuestionPerPage(request.oneQuestionPerPage());
         if (request.items() != null) {
             ContentCheck.draft().contentItems(request.items(), "items");
             part.setItems(request.items());
@@ -339,6 +338,7 @@ public class ContentService {
 
         question.setMaterialBlock(block);
         question.setPart(part);
+        ToeflQuestionDefaults.apply(test, section, part, block, question);
 
         List<Question> ordered = new ArrayList<>(questions.findBySectionOrderByOrderIndexAsc(section));
         ordered.removeIf(item -> item.getId().equals(questionId));
@@ -465,6 +465,7 @@ public class ContentService {
             } else {
                 engines.applyDefaults(question, type);
             }
+            ToeflQuestionDefaults.apply(test, section, part, block, question);
             questions.save(question);
         }
         touch(test);
@@ -505,7 +506,7 @@ public class ContentService {
         Question question = requireQuestion(test, questionId);
         QuestionType type = engines.parse(request.type());
         engines.validate(new QuestionDraft(type, request.promptContent(), request.options(),
-                request.answerKey(), request.scoringConfig(), request.settings()), ContentCheck.draft());
+                request.answerKey(), request.scoringConfig(), request.settings()), ContentCheck.draft(test.getExamPreset()));
         question.setType(type);
         question.setPromptContent(request.promptContent());
         question.setOptions(request.options());
@@ -543,13 +544,14 @@ public class ContentService {
         } catch (IllegalArgumentException exception) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION", "Неизвестный тип секции");
         }
-        if (request.timeLimitMinutes() != null && (request.timeLimitMinutes() < 0 || request.timeLimitMinutes() > 600)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION", "Время секции должно быть от 0 до 600 минут");
-        }
         section.setTitle(request.title().trim());
         section.setInstructions(request.instructions() == null ? "" : request.instructions().trim());
         section.setSectionType(type);
-        section.setTimeLimitMinutes(request.timeLimitMinutes() == null || request.timeLimitMinutes() == 0 ? null : request.timeLimitMinutes());
+        TimeLimits.apply(request.timeLimitSeconds(), request.timeLimitMinutes(),
+                section::setTimeLimitSeconds, section::setTimeLimitMinutes);
+        if (request.timeLimitSeconds() == null && request.timeLimitMinutes() == null) {
+            section.setTimeLimitMinutes(null);
+        }
         section.setAllowBackToQuestions(request.allowBackToQuestions());
         section.setAllowBackToPart(request.allowBackToPart());
         if (request.items() != null) {
@@ -557,6 +559,30 @@ public class ContentService {
             section.setItems(request.items());
         } else if (section.getItems() == null) {
             section.setItems(ContentNodes.array());
+        }
+    }
+
+    private void applyUpdate(TestSection section, SectionWriteRequest request, JsonNode body) {
+        SectionType type;
+        try {
+            type = SectionType.valueOf(request.sectionType());
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION", "Неизвестный тип секции");
+        }
+        section.setTitle(request.title().trim());
+        section.setInstructions(request.instructions() == null ? "" : request.instructions().trim());
+        section.setSectionType(type);
+        TimeLimits.applyPatch(body, request.timeLimitSeconds(), request.timeLimitMinutes(),
+                section::setTimeLimitSeconds, section::setTimeLimitMinutes);
+        if (RequestFields.present(body, "allowBackToQuestions")) {
+            section.setAllowBackToQuestions(request.allowBackToQuestions());
+        }
+        if (RequestFields.present(body, "allowBackToPart")) {
+            section.setAllowBackToPart(request.allowBackToPart());
+        }
+        if (RequestFields.present(body, "items") && request.items() != null) {
+            ContentCheck.draft().contentItems(request.items(), "items");
+            section.setItems(request.items());
         }
     }
 

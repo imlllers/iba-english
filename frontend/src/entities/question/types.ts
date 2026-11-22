@@ -66,6 +66,7 @@ export type QuestionSettings = {
   errorExplanation?: string;
   selectCount?: number;
   timeLimitSeconds?: number | null;
+  readingSeconds?: number | null;
   mediaId?: string;
   mediaKind?: "audio" | "image";
   playbackLimit?: number;

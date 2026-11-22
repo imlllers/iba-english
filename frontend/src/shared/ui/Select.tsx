@@ -10,6 +10,7 @@ export function Select({
   disabled,
   id,
   label,
+  description,
   ariaLabel,
   withAsterisk,
   className,
@@ -24,6 +25,7 @@ export function Select({
   disabled?: boolean;
   id?: string;
   label?: string;
+  description?: string;
   ariaLabel?: string;
   withAsterisk?: boolean;
   className?: string;
@@ -42,6 +44,7 @@ export function Select({
       style={style}
       styles={styles}
       label={label}
+      description={description}
       withAsterisk={withAsterisk}
       aria-label={ariaLabel ?? label}
       data={[

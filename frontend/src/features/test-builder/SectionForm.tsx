@@ -31,6 +31,7 @@ function resolved(override: boolean | null | undefined, fallback: boolean) {
 export function SectionForm({
   section,
   total,
+  examType = "CUSTOM",
   defaultAllowBackToQuestions = true,
   defaultAllowBackToPart = true,
   focused = false,
@@ -83,6 +84,7 @@ export function SectionForm({
       instructions: serializeInstructionDoc(nextInstructions),
       sectionType: section.sectionType,
       timeLimitMinutes: section.timeLimitMinutes,
+      timeLimitSeconds: section.timeLimitSeconds ?? null,
       allowBackToQuestions: nextAllowQ,
       allowBackToPart: nextAllowP,
       items: nextItems,
@@ -180,7 +182,9 @@ export function SectionForm({
         ariaLabel="Превью секции для участника"
         title={title}
         instructions={instructions}
-        items={items.filter((item) => item.kind !== "audio")}
+        items={items}
+        examType={examType}
+        previewScope="section"
       />
     </Stack>
   );

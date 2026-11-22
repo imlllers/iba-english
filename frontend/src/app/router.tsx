@@ -26,7 +26,6 @@ const AdminTestsPage = page(() => import("@/pages/AdminTestsPage/AdminTestsPage"
 const AdminAuditPage = page(() => import("@/pages/AdminAuditPage/AdminAuditPage"), "AdminAuditPage");
 const AdminSettingsPage = page(() => import("@/pages/AdminSettingsPage/AdminSettingsPage"), "AdminSettingsPage");const TakeTestPage = page(() => import("@/pages/TakeTestPage/TakeTestPage"), "TakeTestPage");
 const AttemptResultPage = page(() => import("@/pages/AttemptResultPage/AttemptResultPage"), "AttemptResultPage");
-
 export function AppRouter() {
   return (
     <BrowserRouter>

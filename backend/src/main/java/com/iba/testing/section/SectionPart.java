@@ -40,8 +40,14 @@ public class SectionPart {
     @Column(name = "time_limit_minutes")
     private Integer timeLimitMinutes;
 
+    @Column(name = "time_limit_seconds")
+    private Integer timeLimitSeconds;
+
     @Column(name = "one_question_per_page")
     private Boolean oneQuestionPerPage;
+
+    @Column(name = "auto_advance_on_timeout")
+    private Boolean autoAdvanceOnTimeout;
 
     public UUID getId() {
         return id;
@@ -99,11 +105,27 @@ public class SectionPart {
         this.timeLimitMinutes = timeLimitMinutes;
     }
 
+    public Integer getTimeLimitSeconds() {
+        return timeLimitSeconds;
+    }
+
+    public void setTimeLimitSeconds(Integer timeLimitSeconds) {
+        this.timeLimitSeconds = timeLimitSeconds;
+    }
+
     public Boolean getOneQuestionPerPage() {
         return oneQuestionPerPage;
     }
 
     public void setOneQuestionPerPage(Boolean oneQuestionPerPage) {
         this.oneQuestionPerPage = oneQuestionPerPage;
+    }
+
+    public Boolean getAutoAdvanceOnTimeout() {
+        return autoAdvanceOnTimeout;
+    }
+
+    public void setAutoAdvanceOnTimeout(Boolean autoAdvanceOnTimeout) {
+        this.autoAdvanceOnTimeout = autoAdvanceOnTimeout;
     }
 }

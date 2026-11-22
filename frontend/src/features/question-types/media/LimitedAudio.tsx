@@ -13,6 +13,8 @@ type LimitedAudioProps = {
   autoPlay?: boolean;
   completed?: boolean;
   onEnded?: () => void;
+  onStarted?: () => void;
+  onDurationKnown?: () => void;
   onAutoPlayBlocked?: () => void;
 };
 
@@ -31,6 +33,8 @@ export function LimitedAudio({
   autoPlay = false,
   completed = false,
   onEnded,
+  onStarted,
+  onDurationKnown,
   onAutoPlayBlocked,
 }: LimitedAudioProps) {
   const timeRef = useRef(0);
@@ -102,6 +106,8 @@ export function LimitedAudio({
           onCurrentTimeChange={(time) => {
             timeRef.current = time;
           }}
+          onLoadedMetadata={() => onDurationKnown?.()}
+          onDurationChange={() => onDurationKnown?.()}
           onPlayChange={(next) => {
             if (locked && started && !next && !finished) {
               setPlaying(true);
@@ -127,6 +133,7 @@ export function LimitedAudio({
                 localStorage.setItem(storageKey!, String(nextPlays));
               }
               setStarted(true);
+              onStarted?.();
             }
             setPlaying(next);
           }}

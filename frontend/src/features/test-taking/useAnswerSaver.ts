@@ -7,7 +7,15 @@ import { publicApi } from "./publicApi";
 const DELAY = 700;
 const RETRY = 5000;
 const FINAL = new Set(["TIME_EXPIRED", "ALREADY_SUBMITTED"]);
-const SKIP = new Set(["SECTION_EXPIRED", "VALIDATION", "NOT_FOUND"]);
+const SKIP = new Set([
+  "SECTION_EXPIRED",
+  "PART_EXPIRED",
+  "QUESTION_EXPIRED",
+  "PART_CLOSED",
+  "QUESTION_CLOSED",
+  "VALIDATION",
+  "NOT_FOUND",
+]);
 
 export function useAnswerSaver(token: string | null, onFinal: (code: string) => void) {
   const [answers, setAnswers] = useState<Record<string, AnswerData>>({});
@@ -41,8 +49,8 @@ export function useAnswerSaver(token: string | null, onFinal: (code: string) => 
             finalRef.current(failure.code);
             return false;
           }
-          message = "Your answer was not saved";
           if (!(failure instanceof ApiError && SKIP.has(failure.code))) {
+            message = "Your answer was not saved";
             retry = true;
             if (!pending.current.has(questionId)) {
               pending.current.set(questionId, answer);

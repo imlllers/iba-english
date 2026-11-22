@@ -18,9 +18,9 @@ public class PresetCatalog {
     }
 
     private ExamPreset ielts() {
-        Map<String, Object> settings = baseSettings("IELTS", "section", false, true, true, false, false);
+        Map<String, Object> settings = baseSettings("IELTS", "section", false, true, true, false, true, true);
         settings.put("showResultToParticipant", true);
-        settings.put("resultDetail", "score_and_review");
+        settings.put("resultDetail", "score_and_scale");
         settings.put("focusLossMaxWarnings", 2);
         settings.put("allowEarlySubmit", true);
         settings.put("requireParticipantName", true);
@@ -36,46 +36,48 @@ public class PresetCatalog {
                                 parts(null, "Passage 1", "Passage 2", "Passage 3")),
                         section("Writing", "WRITING", 60, true, true,
                                 parts(null, "Task 1", "Task 2")),
-                        section("Speaking", "SPEAKING", 14, true, true,
+                        section("Speaking", "SPEAKING", 14, false, false,
                                 parts(null, "Part 1", "Part 2", "Part 3"))),
                 settings);
     }
 
     private ExamPreset toefl() {
-        Map<String, Object> settings = baseSettings("TOEFL", "section", true, false, false, false, true);
+        Map<String, Object> settings = baseSettings("TOEFL", "part", true, false, false, false, true, true);
         settings.put("showResultToParticipant", true);
-        settings.put("resultDetail", "score_only");
-        settings.put("focusLossMaxWarnings", 2);
+        settings.put("resultDetail", "score_and_scale");
+        settings.put("focusLossMaxWarnings", null);
         settings.put("allowEarlySubmit", false);
         settings.put("autoAdvanceOnQuestionTimeout", true);
+        settings.put("autoAdvanceOnPartTimeout", true);
+        settings.put("pausePartTimerDuringAudio", false);
         settings.put("questionNumberFormat", "1.");
-        settings.put("listeningAnswerSeconds", 20);
         settings.put("requireParticipantName", true);
         settings.put("requireParticipantEmail", true);
         return new ExamPreset(
                 "TOEFL",
-                "TOEFL",
+                "TOEFL iBT (2026)",
                 "TOEFL",
                 List.of(
-                        section("Reading Section", "READING", 30, false, false,
-                                parts(null,
-                                        "Part 1: Vocabulary & Short Texts",
-                                        "Part 2: Daily Life Texts",
-                                        "Part 3: Academic Passages")),
-                        section("Listening Section", "LISTENING", null, false, false, List.of()),
-                        section("Writing Section", "WRITING", 23, false, false, List.of()),
-                        section("Speaking Section", "SPEAKING", 8, false, false, List.of())),
+                        section("Reading Section", "READING", null, true, false,
+                                List.of(
+                                        part("Module 1", null),
+                                        part("Module 2", null)),
+                                null),
+                        section("Listening Section", "LISTENING", null, false, false, List.of(), null),
+                        section("Writing Section", "WRITING", null, false, false, List.of(
+                                part("Build a Sentence", null),
+                                part("Write an Email", null),
+                                part("Academic Discussion", null)), null),
+                        section("Speaking Section", "SPEAKING", null, false, false, List.of(), true)),
                 settings);
     }
 
     private ExamPreset toeic() {
-        Map<String, Object> settings = baseSettings("TOEIC", "test", true, true, true, false, false);
+        Map<String, Object> settings = baseSettings("TOEIC", "test", true, true, true, false, true, true);
         settings.put("showResultToParticipant", true);
-        settings.put("resultDetail", "score_and_review");
+        settings.put("resultDetail", "score_only");
         settings.put("focusLossMaxWarnings", 2);
         settings.put("allowEarlySubmit", true);
-        settings.put("timeLimitMinutes", 120);
-        settings.put("timeLimitSectionTypes", List.of("LISTENING", "READING"));
         settings.put("requireParticipantName", true);
         settings.put("requireParticipantEmail", true);
         return new ExamPreset(
@@ -83,17 +85,17 @@ public class PresetCatalog {
                 "TOEIC",
                 "TOEIC",
                 List.of(
-                        section("Listening Section", "LISTENING", null, true, true, List.of(
+                        section("Listening Section", "LISTENING", 45, false, false, List.of(
                                 part("Part 1: Photographs", true),
                                 part("Part 2: Question-Response", true),
                                 part("Part 3: Conversations", false),
                                 part("Part 4: Talks", false))),
-                        section("Reading Section", "READING", null, true, true, List.of(
+                        section("Reading Section", "READING", 75, true, true, List.of(
                                 part("Part 5: Incomplete Sentences", true),
                                 part("Part 6: Text Completion", false),
                                 part("Part 7: Reading Comprehension", false))),
-                        section("Writing Section", "WRITING", 60, true, true, List.of()),
-                        section("Speaking Section", "SPEAKING", 20, true, true, List.of())),
+                        section("Speaking Section", "SPEAKING", 20, false, false, List.of()),
+                        section("Writing Section", "WRITING", 60, false, false, List.of())),
                 settings);
     }
 
@@ -104,7 +106,18 @@ public class PresetCatalog {
             Boolean allowBackToQuestions,
             Boolean allowBackToPart,
             List<PresetPart> parts) {
-        return new PresetSection(title, type, minutes, "", allowBackToQuestions, allowBackToPart, parts);
+        return section(title, type, minutes, allowBackToQuestions, allowBackToPart, parts, null);
+    }
+
+    private PresetSection section(
+            String title,
+            String type,
+            Integer minutes,
+            Boolean allowBackToQuestions,
+            Boolean allowBackToPart,
+            List<PresetPart> parts,
+            Boolean speakingAutoFlow) {
+        return new PresetSection(title, type, minutes, "", allowBackToQuestions, allowBackToPart, parts, speakingAutoFlow);
     }
 
     private List<PresetPart> parts(Boolean oneQuestionPerPage, String... titles) {
@@ -112,7 +125,18 @@ public class PresetCatalog {
     }
 
     private PresetPart part(String title, Boolean oneQuestionPerPage) {
-        return new PresetPart(title, oneQuestionPerPage);
+        return new PresetPart(title, oneQuestionPerPage, null, null, null);
+    }
+
+    private PresetPart timedPart(String title, Boolean oneQuestionPerPage, Integer timeLimitMinutes, Integer timeLimitSeconds) {
+        boolean timed = (timeLimitMinutes != null && timeLimitMinutes > 0)
+                || (timeLimitSeconds != null && timeLimitSeconds > 0);
+        return new PresetPart(
+                title,
+                oneQuestionPerPage,
+                timeLimitMinutes,
+                timeLimitSeconds,
+                timed ? Boolean.TRUE : null);
     }
 
     private Map<String, Object> baseSettings(
@@ -122,7 +146,8 @@ public class PresetCatalog {
             boolean allowBackToQuestions,
             boolean allowBackToPart,
             boolean allowBackToSection,
-            boolean audioAutoStart) {
+            boolean audioAutoStart,
+            boolean videoAutoStart) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("examType", examType);
         map.put("questionNumberScope", numberScope);
@@ -131,6 +156,7 @@ public class PresetCatalog {
         map.put("allowBackToPart", allowBackToPart);
         map.put("allowBackToSection", allowBackToSection);
         map.put("audioAutoStart", audioAutoStart);
+        map.put("videoAutoStart", videoAutoStart);
         map.put("shuffleChoices", false);
         return map;
     }
@@ -150,9 +176,15 @@ public class PresetCatalog {
             String instructions,
             Boolean allowBackToQuestions,
             Boolean allowBackToPart,
-            List<PresetPart> parts) {
+            List<PresetPart> parts,
+            Boolean speakingAutoFlow) {
     }
 
-    public record PresetPart(String title, Boolean oneQuestionPerPage) {
+    public record PresetPart(
+            String title,
+            Boolean oneQuestionPerPage,
+            Integer timeLimitMinutes,
+            Integer timeLimitSeconds,
+            Boolean autoAdvanceOnTimeout) {
     }
 }

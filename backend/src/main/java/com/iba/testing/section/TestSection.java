@@ -47,11 +47,17 @@ public class TestSection {
     @Column(name = "time_limit_minutes")
     private Integer timeLimitMinutes;
 
+    @Column(name = "time_limit_seconds")
+    private Integer timeLimitSeconds;
+
     @Column(name = "allow_back_to_questions")
     private Boolean allowBackToQuestions;
 
     @Column(name = "allow_back_to_part")
     private Boolean allowBackToPart;
+
+    @Column(name = "speaking_auto_flow")
+    private Boolean speakingAutoFlow;
 
     public UUID getId() {
         return id;
@@ -117,6 +123,14 @@ public class TestSection {
         this.timeLimitMinutes = timeLimitMinutes;
     }
 
+    public Integer getTimeLimitSeconds() {
+        return timeLimitSeconds;
+    }
+
+    public void setTimeLimitSeconds(Integer timeLimitSeconds) {
+        this.timeLimitSeconds = timeLimitSeconds;
+    }
+
     public Boolean getAllowBackToQuestions() {
         return allowBackToQuestions;
     }
@@ -131,5 +145,13 @@ public class TestSection {
 
     public void setAllowBackToPart(Boolean allowBackToPart) {
         this.allowBackToPart = allowBackToPart;
+    }
+
+    public Boolean getSpeakingAutoFlow() {
+        return speakingAutoFlow;
+    }
+
+    public void setSpeakingAutoFlow(Boolean speakingAutoFlow) {
+        this.speakingAutoFlow = speakingAutoFlow;
     }
 }

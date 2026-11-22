@@ -13,6 +13,8 @@ export type TestRunnerProps = {
   questionEnds?: Record<string, string | null>;
   onEnterSection: (sectionId: string) => void;
   onEnterPart?: (partId: string) => void;
+  onPausePart?: (partId: string, meta?: { audioKey: string; durationSeconds?: number }) => void;
+  onResumePart?: (partId: string) => void;
   onEnterQuestions?: (questionIds: string[]) => void;
   onSubmit: () => void;
   onExpire: () => void;
@@ -23,4 +25,11 @@ export type TestRunnerProps = {
   submitError?: string;
   attemptToken?: string;
   demoMode?: boolean;
+  initialAudioDone?: string[];
+  onPersistAudioDone?: (key: string) => void;
+  initialReadingStarted?: Record<string, string>;
+  initialReadingDone?: string[];
+  onPersistReadingStart?: (questionId: string) => void;
+  onPersistReadingDone?: (questionId: string) => void;
+  flushAnswers?: () => Promise<boolean>;
 };

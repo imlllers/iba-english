@@ -105,7 +105,7 @@ public class ScaleEvaluator {
             } else if (raw.pending) {
                 pending = true;
             } else {
-                score = convert(section, raw.score.doubleValue(), raw.max.doubleValue());
+                score = convert(section, raw.score.doubleValue(), raw.max.doubleValue(), scale.path("id").asText(""), examType);
             }
             if (score == null) {
                 item.putNull("score");
@@ -167,9 +167,14 @@ public class ScaleEvaluator {
         return Math.min(Math.max(value, min), max);
     }
 
-    private static Double convert(JsonNode section, double raw, double rawMax) {
+    private static Double convert(JsonNode section, double raw, double rawMax, String scaleId, String examType) {
         JsonNode convert = section.path("convert");
         String method = convert.path("method").asText("linear");
+        if ("TOEFL".equals(examType) && "table".equals(method)) {
+            int tableRawMax = convert.path("rawMax").asInt(30);
+            raw = rawMax > 0 ? Math.round(raw / rawMax * tableRawMax) : 0;
+            rawMax = tableRawMax;
+        }
         if ("table".equals(method)) {
             long scaled = Math.round(raw);
             for (JsonNode row : convert.path("table")) {

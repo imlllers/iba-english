@@ -65,9 +65,35 @@ public class PublicTestController {
         return attempts.startPart(attemptToken, partId);
     }
 
+    @PostMapping("/attempts/{attemptToken}/parts/{partId}/pause")
+    public Object pausePart(@PathVariable String attemptToken, @PathVariable UUID partId,
+            @RequestBody(required = false) JsonNode body) {
+        return attempts.pausePartTimer(attemptToken, partId, body);
+    }
+
+    @PostMapping("/attempts/{attemptToken}/questions/{questionId}/reading-start")
+    public Object readingStart(@PathVariable String attemptToken, @PathVariable UUID questionId) {
+        return attempts.markReadingStarted(attemptToken, questionId);
+    }
+
+    @PostMapping("/attempts/{attemptToken}/questions/{questionId}/reading-done")
+    public Object readingDone(@PathVariable String attemptToken, @PathVariable UUID questionId) {
+        return attempts.markReadingDone(attemptToken, questionId);
+    }
+
+    @PostMapping("/attempts/{attemptToken}/parts/{partId}/resume")
+    public Object resumePart(@PathVariable String attemptToken, @PathVariable UUID partId) {
+        return attempts.resumePartTimer(attemptToken, partId);
+    }
+
     @PostMapping("/attempts/{attemptToken}/questions/{questionId}/start")
     public Object startQuestion(@PathVariable String attemptToken, @PathVariable UUID questionId) {
         return attempts.startQuestion(attemptToken, questionId);
+    }
+
+    @PostMapping("/attempts/{attemptToken}/audio-done")
+    public Object markAudioDone(@PathVariable String attemptToken, @RequestBody JsonNode body) {
+        return attempts.markAudioDone(attemptToken, body);
     }
 
     @PostMapping("/attempts/{attemptToken}/submit")

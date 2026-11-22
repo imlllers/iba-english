@@ -35,6 +35,7 @@ export function NumberField({
       min={min}
       max={max}
       step={step}
+      clampBehavior={max !== undefined || min !== undefined ? "strict" : undefined}
       decimalScale={step < 1 ? 2 : 0}
       allowNegative={min < 0}
       placeholder={placeholder}
@@ -43,10 +44,20 @@ export function NumberField({
           onChange(undefined);
           return;
         }
-        const parsed = typeof next === "number" ? next : Number(next);
-        if (Number.isFinite(parsed)) {
-          onChange(step >= 1 ? Math.round(parsed) : parsed);
+        let parsed = typeof next === "number" ? next : Number(next);
+        if (!Number.isFinite(parsed)) {
+          return;
         }
+        if (step >= 1) {
+          parsed = Math.round(parsed);
+        }
+        if (max !== undefined && parsed > max) {
+          parsed = max;
+        }
+        if (min !== undefined && parsed < min) {
+          parsed = min;
+        }
+        onChange(parsed);
       }}
     />
   );

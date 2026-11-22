@@ -7,10 +7,11 @@ type CountdownProps = {
   label?: string;
   digitsOnly?: boolean;
   calm?: boolean;
+  onDark?: boolean;
 };
 
-export function Countdown({ label, seconds, digitsOnly = false, calm = false }: CountdownProps) {
-  const low = !calm && seconds <= 300;
+export function Countdown({ label, seconds, digitsOnly = false, calm = false, onDark = false }: CountdownProps) {
+  const low = !calm && !onDark && seconds <= 300;
   const clock = formatClock(Math.max(0, seconds));
 
   if (digitsOnly) {
@@ -21,12 +22,13 @@ export function Countdown({ label, seconds, digitsOnly = false, calm = false }: 
         aria-live={seconds <= 60 ? "polite" : "off"}
         aria-label={label ? `${label} ${clock}` : clock}
         fw={700}
-        c={low ? "red" : "dimmed"}
+        c={low ? "red" : onDark ? undefined : "dimmed"}
         style={{
-          fontSize: calm ? "inherit" : 18,
-          lineHeight: calm ? "inherit" : "26px",
+          fontSize: 18,
+          lineHeight: "26px",
           fontVariantNumeric: "tabular-nums",
           whiteSpace: "nowrap",
+          ...(onDark ? { color: "var(--mantine-color-white)" } : {}),
         }}
       >
         {clock}

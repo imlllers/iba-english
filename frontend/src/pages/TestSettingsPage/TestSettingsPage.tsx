@@ -25,8 +25,10 @@ import {
 import type { Question } from "@/entities/question/types";
 import { withNormalizedSettings } from "@/entities/test/settings";
 import type { ExamTest } from "@/entities/test/types";
+import { limitSecondsFromPart, limitSecondsFromSection } from "@/shared/lib/durationMmSs";
 import { ApiError, errorMessage } from "@/shared/api/client";
 import { Loading } from "@/shared/ui/Loading";
+import { MmSsTimeInput } from "@/shared/ui/MmSsTimeInput";
 import { notify } from "@/shared/ui/notify";
 import { SaveIndicator, type SaveState } from "@/shared/ui/SaveIndicator";
 import { SettingsCard } from "@/shared/ui/SettingsCard";
@@ -53,8 +55,6 @@ const TAB_ITEMS: { id: "general" | "time" | "scoring" | "keys"; label: string; i
 ];
 
 type TabId = (typeof TAB_ITEMS)[number]["id"];
-
-const OFFICIAL_EXAMS = new Set(["IELTS", "TOEFL", "TOEIC"]);
 
 function resolveTab(value: string | null): TabId {
   if (value === "profile" || value === "template" || value === "scale") {
@@ -144,10 +144,8 @@ export function TestSettingsPage() {
     );
   }
 
-  const officialExam = OFFICIAL_EXAMS.has(test.settings.examType ?? "CUSTOM");
-  const tabs = officialExam ? TAB_ITEMS.filter((item) => item.id !== "scoring") : TAB_ITEMS;
-  const activeTab: TabId = officialExam && tab === "scoring" ? "general" : tab;
-  const currentLabel = tabs.find((item) => item.id === activeTab)?.label ?? "Общие";
+  const activeTab: TabId = tab;
+  const currentLabel = TAB_ITEMS.find((item) => item.id === activeTab)?.label ?? "Общие";
 
   return (
     <Box mih="100vh" bg="gray.0">
@@ -193,7 +191,7 @@ export function TestSettingsPage() {
               <WorkspaceSwitch testId={test.id} workspace="settings" />
             </Box>
             <Stack gap={4} px="md" pb="sm" style={{ flex: 1, overflow: "auto" }}>
-              {tabs.map((item) => {
+              {TAB_ITEMS.map((item) => {
                 const TabIcon = item.icon;
                 return (
                   <NavLink
@@ -266,6 +264,7 @@ function TimeLimitRow({
   pl,
   fw,
   onChange,
+  placeholder,
 }: {
   label: string;
   value: number | null | undefined;
@@ -273,6 +272,7 @@ function TimeLimitRow({
   max: number;
   pl?: string | number;
   fw?: number;
+  placeholder?: string;
   onChange: (next: number | null) => void;
 }) {
   return (
@@ -283,12 +283,42 @@ function TimeLimitRow({
         value={value ?? ""}
         min={0}
         max={max}
-        placeholder={unit}
+        placeholder={placeholder ?? unit}
         aria-label={`${label}, ${unit}`}
         style={{ flex: "0 0 110px" }}
         onChange={(next) => {
           onChange(typeof next === "number" && next > 0 ? next : null);
         }}
+      />
+    </Group>
+  );
+}
+
+function MmSsTimeLimitRow({
+  label,
+  totalSeconds,
+  pl,
+  fw,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  totalSeconds: number;
+  pl?: string | number;
+  fw?: number;
+  placeholder?: string;
+  onChange: (next: number | null) => void;
+}) {
+  return (
+    <Group justify="space-between" align="center" gap="sm" wrap="nowrap" pl={pl}>
+      <Text size="sm" fw={fw} truncate style={{ minWidth: 0, flex: 1 }}>{label}</Text>
+      <MmSsTimeInput
+        size="sm"
+        totalSeconds={totalSeconds}
+        placeholder={placeholder ?? "мм:сс"}
+        aria-label={`${label}, мм:сс`}
+        style={{ flex: "0 0 110px" }}
+        onCommit={onChange}
       />
     </Group>
   );
@@ -444,38 +474,34 @@ function TimeTab({
 
               return (
                 <Stack key={section.id} gap="sm">
-                  <TimeLimitRow
+                  <MmSsTimeLimitRow
                     label={`Секция · ${section.title}`}
-                    value={section.timeLimitMinutes}
-                    unit="мин"
-                    max={600}
+                    totalSeconds={limitSecondsFromSection(section)}
                     fw={600}
-                    onChange={(minutes) => {
+                    onChange={(seconds) => {
                       void testsApi.updateSection(test.id, section.id, {
                         title: section.title,
                         instructions: section.instructions,
                         sectionType: section.sectionType,
-                        timeLimitMinutes: minutes,
-                        items: section.items,
+                        timeLimitMinutes: 0,
+                        timeLimitSeconds: seconds ?? 0,
                       }).then(setTest);
                     }}
                   />
 
                   {parts.map((part) => (
                     <Stack key={part.id} gap="sm">
-                      <TimeLimitRow
+                      <MmSsTimeLimitRow
                         label={`Часть · ${part.title}`}
-                        value={part.timeLimitMinutes}
-                        unit="мин"
-                        max={600}
+                        totalSeconds={limitSecondsFromPart(part)}
                         pl="md"
                         fw={600}
-                        onChange={(minutes) => {
+                        onChange={(seconds) => {
                           void testsApi.updatePart(test.id, section.id, part.id, {
                             title: part.title,
                             instructions: part.instructions,
-                            timeLimitMinutes: minutes ?? 0,
-                            items: part.items,
+                            timeLimitMinutes: 0,
+                            timeLimitSeconds: seconds ?? 0,
                           }).then(setTest);
                         }}
                       />

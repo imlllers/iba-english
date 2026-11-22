@@ -257,6 +257,14 @@ export function TestsPage() {
                       <Group gap="md" wrap="nowrap" justify="center">
                         <IconButton
                           size="lg"
+                          label="Демо-версия"
+                          aria-label={`Демо-версия теста «${test.title}»`}
+                          onClick={() => window.open(`/teacher/tests/${test.id}/preview`, "_blank", "noopener")}
+                        >
+                          <Icon name="eye" size={20} />
+                        </IconButton>
+                        <IconButton
+                          size="lg"
                           label="Копировать тест"
                           aria-label={`Копировать тест «${test.title}»`}
                           disabled={action.isPending}

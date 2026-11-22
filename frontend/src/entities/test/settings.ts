@@ -3,9 +3,9 @@ import type {
   ExamDisplayType,
   QuestionNumberFormat,
   QuestionNumberScope,
-  ResultDetail,
   TestSettings,
 } from "./types";
+import { normalizeResultDetail } from "./resultDisplay";
 
 export const QUESTION_NUMBER_FORMATS: QuestionNumberFormat[] = [
   "1",
@@ -48,7 +48,29 @@ export const RESULT_REVIEW_ENABLED = false;
 
 export const ERROR_EXPLANATIONS_ENABLED = false;
 
-export const DISABLED_EXAM_TYPES: ReadonlySet<ExamDisplayType> = new Set<ExamDisplayType>(["TOEIC", "TOEFL"]);
+const OFFICIAL_EXAM_TYPES: ReadonlySet<ExamDisplayType> = new Set(["IELTS", "TOEFL", "TOEIC"]);
+
+export function isOfficialExamType(examType: ExamDisplayType | null | undefined): boolean {
+  return OFFICIAL_EXAM_TYPES.has(examType ?? "CUSTOM");
+}
+
+export function resultDisplayEnabled(examType?: ExamDisplayType | null): boolean {
+  return RESULT_DISPLAY_ENABLED || isOfficialExamType(examType);
+}
+
+export function resultReviewEnabled(examType?: ExamDisplayType | null): boolean {
+  return RESULT_REVIEW_ENABLED || isOfficialExamType(examType);
+}
+
+export function errorExplanationsEnabled(examType?: ExamDisplayType | null): boolean {
+  return ERROR_EXPLANATIONS_ENABLED || isOfficialExamType(examType);
+}
+
+export function accessDatesEnabled(examType?: ExamDisplayType | null): boolean {
+  return ACCESS_DATES_ENABLED || isOfficialExamType(examType);
+}
+
+export const DISABLED_EXAM_TYPES: ReadonlySet<ExamDisplayType> = new Set<ExamDisplayType>(["TOEIC"]);
 export const isExamTypeDisabled = (type: string | null | undefined) => DISABLED_EXAM_TYPES.has(type as ExamDisplayType);
 export const DISABLED_SUFFIX = " – временно недоступен";
 
@@ -75,16 +97,24 @@ export function normalizeExamDisplayType(raw: unknown, examPreset?: string | nul
   return "CUSTOM";
 }
 
+function normalizeVideoAutoStart(source: Partial<TestSettings>): boolean {
+  if (source.videoAutoStart !== undefined) {
+    return Boolean(source.videoAutoStart);
+  }
+  return Boolean(source.audioAutoStart);
+}
+
 export function normalizeTestSettings(
   raw: Partial<TestSettings> | null | undefined,
   examPreset?: string | null,
 ): TestSettings {
   const source = raw ?? {};
-  const detail = source.resultDetail;
-  const resultDetail: ResultDetail =
-    detail === "score_and_review" ? "score_and_review" : "score_only";
+  const resultDetail = normalizeResultDetail(source.resultDetail);
   const focus = source.focusLossMaxWarnings;
   const attempts = source.maxAttempts;
+  const examType = normalizeExamDisplayType(source.examType, examPreset);
+  const questionNumberScope =
+    examType === "TOEFL" ? "part" : normalizeQuestionNumberScope(source.questionNumberScope);
   return {
     requireParticipantName: true,
     requireParticipantEmail: source.requireParticipantEmail !== false,
@@ -94,9 +124,10 @@ export function normalizeTestSettings(
     shuffleChoices: Boolean(source.shuffleChoices),
     focusLossMaxWarnings: typeof focus === "number" && focus > 0 ? focus : null,
     audioAutoStart: Boolean(source.audioAutoStart),
+    videoAutoStart: normalizeVideoAutoStart(source),
     questionNumberFormat: normalizeQuestionNumberFormat(source.questionNumberFormat),
-    questionNumberScope: normalizeQuestionNumberScope(source.questionNumberScope),
-    examType: normalizeExamDisplayType(source.examType, examPreset),
+    questionNumberScope,
+    examType,
     oneQuestionPerPage: source.oneQuestionPerPage !== false,
     errorExplanationMode: normalizeErrorExplanationMode(source.errorExplanationMode),
     showResultToParticipant: source.showResultToParticipant !== false,
@@ -108,12 +139,10 @@ export function normalizeTestSettings(
     timeLimitSectionTypes: source.timeLimitSectionTypes ?? null,
     allowEarlySubmit: source.allowEarlySubmit !== false,
     autoAdvanceOnQuestionTimeout: Boolean(source.autoAdvanceOnQuestionTimeout),
-    listeningAnswerSeconds: typeof source.listeningAnswerSeconds === "number" && source.listeningAnswerSeconds > 0
-      ? source.listeningAnswerSeconds
-      : null,
+    autoAdvanceOnPartTimeout: Boolean(source.autoAdvanceOnPartTimeout),
+    pausePartTimerDuringAudio: Boolean(source.pausePartTimerDuringAudio),
     availableFrom: source.availableFrom ?? null,
     availableUntil: source.availableUntil ?? null,
-    showLevelToParticipant: source.showLevelToParticipant !== false,
     emailResultToParticipant: Boolean(source.emailResultToParticipant),
     scoreScale: source.scoreScale && typeof source.scoreScale === "object" && source.scoreScale.scale ? source.scoreScale : null,
   };

@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -43,6 +44,7 @@ public class ExamTemplateService {
     @Transactional
     public List<ObjectNode> list(UUID ownerId) {
         seedIfEmpty(ownerId);
+        seedMissingBuiltins(ownerId);
         return templates.findByOwnerIdOrderByBuiltinKeyAscTitleAsc(ownerId).stream().map(this::toJson).toList();
     }
 
@@ -61,7 +63,7 @@ public class ExamTemplateService {
         template.setId(UUID.randomUUID());
         template.setOwner(owner);
         template.setTitle(request.title().trim());
-        template.setFamily("CUSTOM");
+        template.setFamily(familyFromSettings(request.defaultSettings()));
         template.setBuiltinKey(null);
         template.setSections(request.sections());
         template.setDefaultSettings(request.defaultSettings());
@@ -78,6 +80,9 @@ public class ExamTemplateService {
         template.setTitle(request.title().trim());
         template.setSections(request.sections());
         template.setDefaultSettings(request.defaultSettings());
+        if (!template.isBuiltin()) {
+            template.setFamily(familyFromSettings(request.defaultSettings()));
+        }
         template.setUpdatedAt(OffsetDateTime.now());
         templates.save(template);
         return toJson(template);
@@ -137,17 +142,53 @@ public class ExamTemplateService {
         }
     }
 
+    private void seedMissingBuiltins(UUID ownerId) {
+        UserAccount owner = users.findById(ownerId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Пользователь не найден"));
+        OffsetDateTime now = OffsetDateTime.now();
+        for (var preset : catalog.all()) {
+            if (templates.findByOwnerIdAndBuiltinKey(ownerId, preset.id()).isPresent()) {
+                continue;
+            }
+            ExamTemplate template = new ExamTemplate();
+            template.setId(UUID.randomUUID());
+            template.setOwner(owner);
+            template.setBuiltinKey(preset.id());
+            template.setFamily(preset.family());
+            template.setCreatedAt(now);
+            template.setUpdatedAt(now);
+            applyPreset(template, preset);
+            templates.save(template);
+        }
+    }
+
+    private static String familyFromSettings(JsonNode settings) {
+        String examType = settings == null ? "CUSTOM" : settings.path("examType").asText("CUSTOM");
+        if (examType.equals("IELTS") || examType.equals("TOEFL") || examType.equals("TOEIC")) {
+            return examType;
+        }
+        return "CUSTOM";
+    }
+
+    private static String scaleIdForPreset(String presetId) {
+        return presetId.toLowerCase(Locale.ROOT);
+    }
+
     private void applyPreset(ExamTemplate template, PresetCatalog.ExamPreset preset) {
         template.setTitle(preset.title());
         template.setFamily(preset.family());
         template.setSections(mapper.valueToTree(preset.sections()));
         ObjectNode settings = mapper.valueToTree(preset.defaultSettings());
-        JsonNode scale = scales.ownerCopy(template.getOwner().getId(), preset.family().toLowerCase(java.util.Locale.ROOT));
+        JsonNode scale = scales.ownerCopy(template.getOwner().getId(), scaleIdForPreset(preset.id()));
         if (scale != null) {
             ObjectNode binding = settings.putObject("scoreScale");
             binding.put("sourceId", scale.path("id").asText());
             binding.set("scale", scale);
-            binding.putArray("sections");
+            ArrayNode mapping = binding.putArray("sections");
+            JsonNode scaleSections = scale.path("sections");
+            for (int index = 0; index < scaleSections.size(); index++) {
+                mapping.addObject().put("sectionIndex", index);
+            }
         }
         template.setDefaultSettings(settings);
     }

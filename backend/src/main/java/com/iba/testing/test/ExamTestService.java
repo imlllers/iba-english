@@ -12,6 +12,7 @@ import com.iba.testing.common.exception.ApiException;
 import com.iba.testing.common.response.PageResponse;
 import com.iba.testing.platform.PlatformService;
 import com.iba.testing.preset.PresetCatalog;
+import com.iba.testing.scale.ScoreScaleService;
 import com.iba.testing.question.Question;
 import com.iba.testing.question.QuestionRepository;
 import com.iba.testing.question.engine.ContentCheck;
@@ -36,8 +37,11 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -53,6 +57,7 @@ public class ExamTestService {
     private final TestViews views;
     private final PresetCatalog presets;
     private final ExamTemplateService examTemplates;
+    private final ScoreScaleService scoreScales;
     private final QuestionEngines engines;
     private final AuditService audit;
     private final PlatformService platform;
@@ -61,7 +66,7 @@ public class ExamTestService {
     public ExamTestService(ExamTestRepository tests, TestSectionRepository sections, SectionPartRepository parts,
                            QuestionRepository questions, TestVersionRepository versions, TestAttemptRepository attempts,
                            ExamAccess access, TestViews views, PresetCatalog presets, ExamTemplateService examTemplates,
-                           QuestionEngines engines, AuditService audit, PlatformService platform, ObjectMapper mapper) {
+                           ScoreScaleService scoreScales, QuestionEngines engines, AuditService audit, PlatformService platform, ObjectMapper mapper) {
         this.tests = tests;
         this.sections = sections;
         this.parts = parts;
@@ -72,6 +77,7 @@ public class ExamTestService {
         this.views = views;
         this.presets = presets;
         this.examTemplates = examTemplates;
+        this.scoreScales = scoreScales;
         this.engines = engines;
         this.audit = audit;
         this.platform = platform;
@@ -187,11 +193,15 @@ public class ExamTestService {
         }
         test.setSettings(cleanSettings(settingsSource));
         if (template != null) {
-            String family = template.getFamily();
-            test.setExamPreset("CUSTOM".equals(family) ? null : family);
+            if (template.getBuiltinKey() != null) {
+                test.setExamPreset(template.getBuiltinKey());
+            } else {
+                test.setExamPreset(presetFromFamilyOrType(template.getFamily(), test.getSettings()));
+            }
         } else {
             test.setExamPreset(preset == null ? null : preset.id());
         }
+        attachMissingScoreScale(test, ownerId);
         tests.save(test);
 
         if (template != null) {
@@ -211,6 +221,7 @@ public class ExamTestService {
                 section.setTimeLimitMinutes(sectionPreset.timeLimitMinutes());
                 section.setAllowBackToQuestions(sectionPreset.allowBackToQuestions());
                 section.setAllowBackToPart(sectionPreset.allowBackToPart());
+                section.setSpeakingAutoFlow(sectionPreset.speakingAutoFlow());
                 sections.save(section);
                 int partIndex = 0;
                 for (var partPreset : sectionPreset.parts()) {
@@ -222,9 +233,13 @@ public class ExamTestService {
                     part.setItems(ContentNodes.array());
                     part.setOrderIndex(partIndex++);
                     part.setOneQuestionPerPage(partPreset.oneQuestionPerPage());
+                    part.setTimeLimitMinutes(partPreset.timeLimitMinutes());
+                    part.setTimeLimitSeconds(partPreset.timeLimitSeconds());
+                    part.setAutoAdvanceOnTimeout(partPreset.autoAdvanceOnTimeout());
                     parts.save(part);
                 }
             }
+            bindScaleSections(test, createdIdsFromPreset(test));
         } else {
             TestSection section = new TestSection();
             section.setId(UUID.randomUUID());
@@ -239,10 +254,50 @@ public class ExamTestService {
         return detail(test);
     }
 
-    private void bindScaleSections(ExamTest test, List<UUID> sectionIds) {
-        JsonNode mapping = test.getSettings().path("scoreScale").path("sections");
-        if (!mapping.isArray()) {
+    private static String presetFromFamilyOrType(String family, JsonNode settings) {
+        if (family != null && (family.equals("IELTS") || family.equals("TOEFL") || family.equals("TOEIC"))) {
+            return family;
+        }
+        String examType = settings.path("examType").asText("CUSTOM");
+        if (examType.equals("IELTS") || examType.equals("TOEFL") || examType.equals("TOEIC")) {
+            return examType;
+        }
+        return null;
+    }
+
+    private void attachMissingScoreScale(ExamTest test, UUID ownerId) {
+        JsonNode current = test.getSettings().path("scoreScale");
+        if (current.path("scale").isObject()) {
             return;
+        }
+        String examType = test.getSettings().path("examType").asText("CUSTOM");
+        String scaleId = examType.toLowerCase(Locale.ROOT);
+        JsonNode scale = scoreScales.ownerCopy(ownerId, scaleId);
+        if (scale == null || !test.getSettings().isObject()) {
+            return;
+        }
+        ObjectNode binding = ((ObjectNode) test.getSettings()).putObject("scoreScale");
+        binding.put("sourceId", scale.path("id").asText());
+        binding.set("scale", scale);
+        binding.putArray("sections");
+    }
+
+    private List<UUID> createdIdsFromPreset(ExamTest test) {
+        return sections.findByTestOrderByOrderIndexAsc(test).stream().map(TestSection::getId).toList();
+    }
+
+    private void bindScaleSections(ExamTest test, List<UUID> sectionIds) {
+        JsonNode bindingNode = test.getSettings().path("scoreScale");
+        if (!bindingNode.isObject()) {
+            return;
+        }
+        ObjectNode binding = (ObjectNode) bindingNode;
+        JsonNode scaleSections = binding.path("scale").path("sections");
+        ArrayNode mapping = binding.path("sections").isArray()
+                ? (ArrayNode) binding.path("sections")
+                : binding.putArray("sections");
+        while (mapping.size() < scaleSections.size()) {
+            mapping.addObject();
         }
         for (JsonNode item : mapping) {
             if (item instanceof ObjectNode entry && !entry.hasNonNull("sectionId") && entry.path("sectionIndex").isInt()) {
@@ -251,6 +306,36 @@ public class ExamTestService {
                     entry.put("sectionId", sectionIds.get(index).toString());
                 }
             }
+        }
+        List<TestSection> created = sections.findByTestOrderByOrderIndexAsc(test);
+        Set<UUID> used = new HashSet<>();
+        for (JsonNode item : mapping) {
+            if (item.path("sectionId").isTextual()) {
+                try {
+                    used.add(UUID.fromString(item.path("sectionId").asText()));
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+        }
+        int index = 0;
+        for (JsonNode scaleSection : scaleSections) {
+            ObjectNode entry = (ObjectNode) mapping.get(index);
+            index++;
+            if (entry.hasNonNull("sectionId")) {
+                continue;
+            }
+            String type = scaleSection.path("sectionType").asText("");
+            if (type.isBlank()) {
+                type = scaleSection.path("name").asText("").toUpperCase(Locale.ROOT);
+            }
+            final String expected = type;
+            created.stream()
+                    .filter(section -> !used.contains(section.getId()) && section.getSectionType().name().equals(expected))
+                    .findFirst()
+                    .ifPresent(section -> {
+                        used.add(section.getId());
+                        entry.put("sectionId", section.getId().toString());
+                    });
         }
         tests.save(test);
     }
@@ -289,6 +374,10 @@ public class ExamTestService {
             if (minutes != null && !minutes.isNull()) {
                 section.setTimeLimitMinutes(minutes.asInt());
             }
+            JsonNode seconds = sectionPreset.get("timeLimitSeconds");
+            if (seconds != null && !seconds.isNull() && seconds.asInt() > 0) {
+                section.setTimeLimitSeconds(seconds.asInt());
+            }
             JsonNode backQ = sectionPreset.get("allowBackToQuestions");
             if (backQ != null && !backQ.isNull()) {
                 section.setAllowBackToQuestions(backQ.asBoolean());
@@ -296,6 +385,10 @@ public class ExamTestService {
             JsonNode backP = sectionPreset.get("allowBackToPart");
             if (backP != null && !backP.isNull()) {
                 section.setAllowBackToPart(backP.asBoolean());
+            }
+            JsonNode speakingFlow = sectionPreset.get("speakingAutoFlow");
+            if (speakingFlow != null && !speakingFlow.isNull()) {
+                section.setSpeakingAutoFlow(speakingFlow.asBoolean());
             }
             sections.save(section);
             created.add(section.getId());
@@ -313,6 +406,18 @@ public class ExamTestService {
                     JsonNode oq = partPreset.get("oneQuestionPerPage");
                     if (oq != null && !oq.isNull()) {
                         part.setOneQuestionPerPage(oq.asBoolean());
+                    }
+                    JsonNode partMinutes = partPreset.get("timeLimitMinutes");
+                    if (partMinutes != null && !partMinutes.isNull()) {
+                        part.setTimeLimitMinutes(partMinutes.asInt());
+                    }
+                    JsonNode partSeconds = partPreset.get("timeLimitSeconds");
+                    if (partSeconds != null && !partSeconds.isNull()) {
+                        part.setTimeLimitSeconds(partSeconds.asInt());
+                    }
+                    JsonNode advancePart = partPreset.get("autoAdvanceOnTimeout");
+                    if (advancePart != null && !advancePart.isNull()) {
+                        part.setAutoAdvanceOnTimeout(advancePart.asBoolean());
                     }
                     parts.save(part);
                 }
@@ -361,6 +466,7 @@ public class ExamTestService {
         copy.setCreatedAt(now);
         copy.setUpdatedAt(now);
         tests.save(copy);
+        Map<UUID, UUID> sectionIds = new HashMap<>();
         for (TestSection section : sections.findByTestOrderByOrderIndexAsc(source)) {
             TestSection sectionCopy = new TestSection();
             sectionCopy.setId(UUID.randomUUID());
@@ -371,9 +477,11 @@ public class ExamTestService {
             sectionCopy.setOrderIndex(section.getOrderIndex());
             sectionCopy.setSectionType(section.getSectionType());
             sectionCopy.setTimeLimitMinutes(section.getTimeLimitMinutes());
+            sectionCopy.setTimeLimitSeconds(section.getTimeLimitSeconds());
             sectionCopy.setAllowBackToQuestions(section.getAllowBackToQuestions());
             sectionCopy.setAllowBackToPart(section.getAllowBackToPart());
             sections.save(sectionCopy);
+            sectionIds.put(section.getId(), sectionCopy.getId());
             Map<UUID, SectionPart> partMap = new HashMap<>();
             for (SectionPart part : parts.findBySectionOrderByOrderIndexAsc(section)) {
                 SectionPart partCopy = new SectionPart();
@@ -383,6 +491,7 @@ public class ExamTestService {
                 partCopy.setInstructions(part.getInstructions());
                 partCopy.setItems(part.getItems() == null ? ContentNodes.array() : part.getItems().deepCopy());
                 partCopy.setTimeLimitMinutes(part.getTimeLimitMinutes());
+                partCopy.setTimeLimitSeconds(part.getTimeLimitSeconds());
                 partCopy.setOneQuestionPerPage(part.getOneQuestionPerPage());
                 partCopy.setOrderIndex(part.getOrderIndex());
                 parts.save(partCopy);
@@ -406,7 +515,31 @@ public class ExamTestService {
                 questions.save(questionCopy);
             }
         }
+        remapScoreScaleSections(copy, sectionIds);
         return detail(copy);
+    }
+
+    private void remapScoreScaleSections(ExamTest test, Map<UUID, UUID> sectionIds) {
+        JsonNode mapping = test.getSettings().path("scoreScale").path("sections");
+        if (!mapping.isArray()) {
+            return;
+        }
+        for (JsonNode item : mapping) {
+            if (!(item instanceof ObjectNode entry) || !entry.path("sectionId").isTextual()) {
+                continue;
+            }
+            try {
+                UUID next = sectionIds.get(UUID.fromString(entry.path("sectionId").asText()));
+                if (next != null) {
+                    entry.put("sectionId", next.toString());
+                } else {
+                    entry.remove("sectionId");
+                }
+            } catch (IllegalArgumentException ignored) {
+                entry.remove("sectionId");
+            }
+        }
+        tests.save(test);
     }
 
     @Transactional
@@ -430,7 +563,7 @@ public class ExamTestService {
             for (Question question : questions.findBySectionOrderByOrderIndexAsc(section)) {
                 questionNumber++;
                 try {
-                    engines.validateStored(question, ContentCheck.publication());
+                    engines.validateStored(question, ContentCheck.publication(test.getExamPreset()));
                 } catch (ApiException exception) {
                     String where = "Секция " + sectionNumber + ", задание " + questionNumber;
                     throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION", where + ": " + exception.getMessage(),
@@ -538,13 +671,22 @@ public class ExamTestService {
     public ObjectNode cleanSettings(JsonNode source) {
         ObjectNode settings = mapper.createObjectNode();
         settings.put("requireParticipantName", true);
-        settings.put("requireParticipantEmail", source.path("requireParticipantEmail").asBoolean(true));
+        boolean emailResultToParticipant = source.path("emailResultToParticipant").asBoolean(false);
+        boolean requireParticipantEmail = source.path("requireParticipantEmail").asBoolean(true);
+        if (emailResultToParticipant) {
+            requireParticipantEmail = true;
+        }
+        settings.put("requireParticipantEmail", requireParticipantEmail);
         settings.putNull("accessCode");
         settings.put("allowBackToQuestions", source.path("allowBackToQuestions").asBoolean(true));
         settings.put("allowBackToPart", source.path("allowBackToPart").asBoolean(true));
         settings.put("allowBackToSection", source.path("allowBackToSection").asBoolean(true));
         settings.put("shuffleChoices", source.path("shuffleChoices").asBoolean(false));
         settings.put("audioAutoStart", source.path("audioAutoStart").asBoolean(false));
+        boolean videoAutoStart = source.has("videoAutoStart")
+                ? source.path("videoAutoStart").asBoolean(false)
+                : source.path("audioAutoStart").asBoolean(false);
+        settings.put("videoAutoStart", videoAutoStart);
         String numberFormat = source.path("questionNumberFormat").asText("1");
         if (!numberFormat.equals("1")
                 && !numberFormat.equals("1.")
@@ -561,7 +703,6 @@ public class ExamTestService {
                 && !numberScope.equals("part")) {
             numberScope = "test";
         }
-        settings.put("questionNumberScope", numberScope);
         String examType = source.path("examType").asText("CUSTOM");
         if (!examType.equals("CUSTOM")
                 && !examType.equals("IELTS")
@@ -570,6 +711,10 @@ public class ExamTestService {
             examType = "CUSTOM";
         }
         settings.put("examType", examType);
+        if (examType.equals("TOEFL")) {
+            numberScope = "part";
+        }
+        settings.put("questionNumberScope", numberScope);
         settings.put("oneQuestionPerPage", source.path("oneQuestionPerPage").asBoolean(true));
         String errorExplanationMode = source.path("errorExplanationMode").asText("off");
         if (!errorExplanationMode.equals("off")
@@ -589,11 +734,7 @@ public class ExamTestService {
             settings.putNull("focusLossMaxWarnings");
         }
         settings.put("showResultToParticipant", source.path("showResultToParticipant").asBoolean(true));
-        String detail = source.path("resultDetail").asText("score_only");
-        if (!detail.equals("score_only") && !detail.equals("score_and_review")) {
-            detail = "score_only";
-        }
-        settings.put("resultDetail", detail);
+        settings.put("resultDetail", ResultDisplay.normalizeDetail(source));
         JsonNode attempts = source.path("maxAttempts");
         if (attempts.isNumber() && attempts.asInt() > 0) {
             if (attempts.asInt() > 100) {
@@ -614,15 +755,8 @@ public class ExamTestService {
         }
         settings.put("allowEarlySubmit", source.path("allowEarlySubmit").asBoolean(true));
         settings.put("autoAdvanceOnQuestionTimeout", source.path("autoAdvanceOnQuestionTimeout").asBoolean(false));
-        JsonNode listeningSeconds = source.path("listeningAnswerSeconds");
-        if (listeningSeconds.isNumber() && listeningSeconds.asInt() > 0) {
-            if (listeningSeconds.asInt() > 600) {
-                throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION", "Время на ответ не больше 600 секунд");
-            }
-            settings.put("listeningAnswerSeconds", listeningSeconds.asInt());
-        } else {
-            settings.putNull("listeningAnswerSeconds");
-        }
+        settings.put("autoAdvanceOnPartTimeout", source.path("autoAdvanceOnPartTimeout").asBoolean(false));
+        settings.put("pausePartTimerDuringAudio", source.path("pausePartTimerDuringAudio").asBoolean(false));
         ArrayNode sectionTypes = settings.putArray("timeLimitSectionTypes");
         JsonNode typesNode = source.path("timeLimitSectionTypes");
         if (typesNode.isArray()) {
@@ -644,8 +778,7 @@ public class ExamTestService {
         }
         putMoment(settings, "availableFrom", from);
         putMoment(settings, "availableUntil", until);
-        settings.put("showLevelToParticipant", source.path("showLevelToParticipant").asBoolean(true));
-        settings.put("emailResultToParticipant", source.path("emailResultToParticipant").asBoolean(false));
+        settings.put("emailResultToParticipant", emailResultToParticipant);
         JsonNode scale = source.path("scoreScale");
         if (scale.isObject() && scale.path("scale").isObject() && scale.path("sections").isArray()) {
             if (scale.toString().length() > 100_000) {

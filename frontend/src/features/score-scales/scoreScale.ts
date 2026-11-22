@@ -11,8 +11,8 @@ export const scoreScalesApi = {
 };
 
 export const TOTAL_RULES = [
-  { value: "sum", label: "Сложить баллы всех секций (как в TOEFL и TOEIC)" },
-  { value: "average", label: "Среднее по секциям, округлить до 0.5 (как в IELTS)" },
+  { value: "sum", label: "Сложить баллы всех секций (как в TOEIC)" },
+  { value: "average", label: "Среднее по секциям, округлить до 0.5 (как в IELTS и TOEFL)" },
 ] as const;
 
 export function withTotalRule(scale: ScoreScale, rule: Aggregate): ScoreScale {
@@ -35,10 +35,30 @@ export function scaleSectionType(section: ScaleSection): SectionType {
   return SCALE_SECTION_TYPES.some((item) => item.value === byName && byName !== "CUSTOM") ? (byName as SectionType) : "CUSTOM";
 }
 
-const BUILTIN_EXAM_TYPES: Record<string, ExamDisplayType> = { ielts: "IELTS", toefl: "TOEFL", toeic: "TOEIC" };
+const BUILTIN_EXAM_TYPES: Record<string, ExamDisplayType> = {
+  ielts: "IELTS",
+  toefl: "TOEFL",
+  toeic: "TOEIC",
+};
 
 export function scaleExamType(scale: ScoreScale): ExamDisplayType {
   return scale.examType ?? BUILTIN_EXAM_TYPES[scale.id] ?? "CUSTOM";
+}
+
+export function preferredScoreScale(
+  scales: ScoreScale[],
+  examType: ExamDisplayType,
+  examPreset?: string | null,
+): ScoreScale | undefined {
+  const fitting = scales.filter((scale) => scaleExamType(scale) === examType);
+  if (fitting.length === 0) {
+    return undefined;
+  }
+  if (examType === "TOEFL") {
+    return fitting.find((scale) => scale.id === "toefl") ?? fitting[0];
+  }
+  const presetId = examPreset?.toLowerCase() ?? "";
+  return fitting.find((scale) => scale.id === presetId) ?? fitting[0];
 }
 export function sectionTypeLabel(type: SectionType): string {
   return SCALE_SECTION_TYPES.find((item) => item.value === type)?.label ?? "Пользовательская";

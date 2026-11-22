@@ -12,11 +12,15 @@
 
 `id`, `owner_id`, `title`, `description`, `exam_preset`, `status` (`DRAFT`, `PUBLISHED`, `ARCHIVED`), `public_token`, `public_token_expires_at`, `settings`, `created_at`, `updated_at`. Тесты только на английском, отдельного поля языка нет. Ссылка действует 12 часов: срок записывается в `public_token_expires_at` в момент публикации или замены ссылки.
 
-`settings` хранит общее время, окно доступности, обязательность имени и показ результата участнику.
+`settings` хранит тип экзамена, время теста, окно доступа, обязательность имени и email, нумерацию, навигацию, автовоспроизведение аудио и видео, контроль выхода из окна теста, состав результата, шкалу баллов, лимит попыток, досрочную сдачу и автопереход по таймерам.
 
 ## test_sections
 
-`id`, `test_id`, `title`, `instructions`, `order_index`, `section_type`, `time_limit_minutes`.
+`id`, `test_id`, `title`, `instructions`, `order_index`, `section_type`, `time_limit_minutes`, `time_limit_seconds`, `speaking_auto_flow`.
+
+## section_parts
+
+`id`, `section_id`, `title`, `instructions`, `order_index`, `time_limit_minutes`, `time_limit_seconds`, `one_question_per_page`, `auto_advance_on_timeout`.
 
 ## questions
 
@@ -48,7 +52,7 @@
 
 ## media_assets
 
-`id`, `owner_id`, `attempt_id`, `folder_id`, `storage_key`, `original_filename`, `mime_type`, `size_bytes`, `created_at`.
+`id`, `owner_id`, `attempt_id`, `folder_id`, `storage_key`, `original_filename`, `mime_type`, `size_bytes`, `duration_seconds`, `created_at`.
 
 Материал преподавателя связан с `owner_id`, запись голоса участника – с `attempt_id`. `folder_id` – папка в библиотеке (null – корень). Файл лежит на диске под случайным `storage_key`, исходное имя путём не используется.
 

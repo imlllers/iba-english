@@ -1,4 +1,5 @@
 import type { ContentItem, PublicQuestion } from "@/entities/question/types";
+import type { MaterialBlock } from "@/entities/test/types";
 import { blockItems, questionItems } from "@/features/question-types/content/contentItems";
 import type { RunnerPage } from "./runnerPages";
 
@@ -61,6 +62,56 @@ export function isGateReady(done: ReadonlySet<string>, keys: string[]) {
 
 export function questionAudioReady(queue: GateAudio[], done: ReadonlySet<string>, question: PublicQuestion) {
   return isGateReady(done, blockGateKeys(queue)) && isGateReady(done, questionGateKeys(queue, question.id));
+}
+
+function resolveMaterialBlock(page: RunnerPage, blockId: string): MaterialBlock | null {
+  if (page.block?.id === blockId) {
+    return page.block;
+  }
+  return page.section.materialBlocks?.find((item) => item.id === blockId) ?? null;
+}
+
+export function groupBlockAudioReady(page: RunnerPage, blockId: string, done: ReadonlySet<string>) {
+  const block = resolveMaterialBlock(page, blockId);
+  if (!block) {
+    return true;
+  }
+  const queue = pageGateAudios({ ...page, block, questions: [] });
+  return isGateReady(done, blockGateKeys(queue));
+}
+
+export function speakingPromptCanStart(
+  page: RunnerPage,
+  question: PublicQuestion,
+  done: ReadonlySet<string>,
+  readingDone: ReadonlySet<string>,
+  demoMode = false,
+) {
+  const seconds = question.settings.readingSeconds;
+  if (!demoMode && typeof seconds === "number" && seconds > 0 && !readingDone.has(question.id)) {
+    return false;
+  }
+  const blockId = question.materialBlockId ?? page.block?.id ?? null;
+  if (blockId && !groupBlockAudioReady(page, blockId, done)) {
+    return false;
+  }
+  return true;
+}
+
+export function questionTimerReady(
+  page: RunnerPage & { groupContent?: boolean },
+  queue: GateAudio[],
+  done: ReadonlySet<string>,
+  question: PublicQuestion,
+) {
+  if (page.groupContent) {
+    return false;
+  }
+  const blockId = question.materialBlockId ?? page.block?.id ?? null;
+  if (blockId && !groupBlockAudioReady(page, blockId, done)) {
+    return false;
+  }
+  return questionAudioReady(queue, done, question);
 }
 
 export function activeGateKey(queue: GateAudio[], done: ReadonlySet<string>) {

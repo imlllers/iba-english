@@ -1,5 +1,5 @@
 import type { AnswerData, Question } from "@/entities/question/types";
-import type { PublicTest } from "@/entities/test/types";
+import type { ExamDisplayType, PublicTest } from "@/entities/test/types";
 
 export type AttemptStatus = "IN_PROGRESS" | "SUBMITTED" | "AUTO_GRADED" | "NEEDS_REVIEW" | "REVIEWED";
 
@@ -62,6 +62,7 @@ export type ReviewedAnswer = {
 export type AttemptDetail = AttemptSummary & {
   answers: ReviewedAnswer[];
   scaleResult?: ScaleResult | null;
+  examType?: ExamDisplayType;
 };
 
 export type ParticipantExplanationItem = {
@@ -82,11 +83,16 @@ export type AnswerCheckResult = {
 export type ParticipantResult = {
   status: AttemptStatus;
   submitted: boolean;
+  examType?: string;
+  showResultToParticipant?: boolean;
+  emailResultToParticipant?: boolean;
+  participantEmail?: string | null;
+  hasSpeakingSection?: boolean;
   scoreVisible: boolean;
   score?: number;
   maxScore?: number;
   pendingReview?: boolean;
-  resultDetail?: "score_only" | "score_and_review";
+  resultDetail?: "score_only" | "sections_only" | "score_and_scale";
   reviewVisible?: boolean;
   explanations?: ParticipantExplanationItem[];
   scale?: ScaleResult;
@@ -97,6 +103,8 @@ export type StartedAttempt = {
   status: AttemptStatus;
   expiresAt: string | null;
   blockEndsAt?: string | null;
+  audioDone?: string[];
+  reading?: { started?: Record<string, string>; done?: string[] };
   test: PublicTest;
 };
 
@@ -104,6 +112,8 @@ export type ResumedAttempt = {
   status: AttemptStatus;
   expiresAt: string | null;
   blockEndsAt?: string | null;
+  audioDone?: string[];
+  reading?: { started?: Record<string, string>; done?: string[] };
   test: PublicTest;
   answers: { questionId: string; answerData: AnswerData }[];
 };

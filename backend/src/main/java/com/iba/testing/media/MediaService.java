@@ -38,6 +38,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -61,6 +62,7 @@ public class MediaService {
             Map.entry("audio/webm", "webm"),
             Map.entry("audio/mp4", "m4a"),
             Map.entry("video/mp4", "mp4"),
+            Map.entry("video/quicktime", "mov"),
             Map.entry("video/webm", "webm"),
             Map.entry("application/pdf", "pdf")
     );
@@ -71,7 +73,8 @@ public class MediaService {
             "audio/x-wav", "audio/wav",
             "audio/wave", "audio/wav",
             "audio/mp3", "audio/mpeg",
-            "image/jpg", "image/jpeg"
+            "image/jpg", "image/jpeg",
+            "video/x-quicktime", "video/quicktime"
     );
 
     private final MediaAssetRepository assets;
@@ -482,7 +485,41 @@ public class MediaService {
         asset.setMimeType(mime);
         asset.setSizeBytes(file.getSize());
         asset.setCreatedAt(OffsetDateTime.now());
+        AudioDurationProbe.probeSeconds(directory().resolve(key), mime)
+                .ifPresent(asset::setDurationSeconds);
         return assets.save(asset);
+    }
+
+    @Transactional
+    public OptionalInt durationSecondsForPause(UUID mediaId) {
+        MediaAsset asset = require(mediaId);
+        if (asset.getDurationSeconds() != null && asset.getDurationSeconds() > 0) {
+            return OptionalInt.of(asset.getDurationSeconds());
+        }
+        OptionalInt probed = AudioDurationProbe.probeSeconds(
+                directory().resolve(asset.getStorageKey()), asset.getMimeType());
+        if (probed.isEmpty() || probed.getAsInt() <= 0) {
+            return OptionalInt.empty();
+        }
+        asset.setDurationSeconds(probed.getAsInt());
+        assets.save(asset);
+        return probed;
+    }
+
+    @Transactional
+    public int backfillMissingDurations() {
+        int updated = 0;
+        for (MediaAsset asset : assets.findAudioWithoutDuration()) {
+            OptionalInt probed = AudioDurationProbe.probeSeconds(
+                    directory().resolve(asset.getStorageKey()), asset.getMimeType());
+            if (probed.isEmpty() || probed.getAsInt() <= 0) {
+                continue;
+            }
+            asset.setDurationSeconds(probed.getAsInt());
+            assets.save(asset);
+            updated++;
+        }
+        return updated;
     }
 
     private long uploadLimitFor(String mime, TestAttempt attempt) {

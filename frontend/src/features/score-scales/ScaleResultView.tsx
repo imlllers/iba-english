@@ -26,6 +26,7 @@ export function ManualScore({ section, compact = false, onSave }: { section: Sca
       min={section.min}
       max={section.max}
       step={section.step}
+      clampBehavior="strict"
       decimalScale={Number.isInteger(section.step) ? 0 : 2}
       error={invalid ? `${formatNumber(section.min)}-${formatNumber(section.max)}` : undefined}
       onChange={setValue}
@@ -33,11 +34,32 @@ export function ManualScore({ section, compact = false, onSave }: { section: Sca
   );
 }
 
-export function ScaleResultView({ result, onManual, showRaw = true }: {
+function ieltsSpeakingOverallHint(result: ScaleResult, examType?: string, participant?: boolean): string | null {
+  if (!participant || examType !== "IELTS") {
+    return null;
+  }
+  const speaking = result.sections.find((section) => section.name === "Speaking");
+  if (!speaking || speaking.score !== null) {
+    return null;
+  }
+  const othersScored = result.sections
+    .filter((section) => section.name !== "Speaking")
+    .some((section) => section.score !== null);
+  if (!othersScored || result.total !== null) {
+    return null;
+  }
+  return "Overall: нет оценки за Speaking";
+}
+
+export function ScaleResultView({ result, onManual, showRaw = true, examType, participant = false, hideOverall = false }: {
   result: ScaleResult;
   onManual?: (index: number, score: number | null) => void;
   showRaw?: boolean;
+  examType?: string;
+  participant?: boolean;
+  hideOverall?: boolean;
 }) {
+  const overallHint = ieltsSpeakingOverallHint(result, examType, participant);
   return (
     <Stack gap="sm">
       <Table>
@@ -75,16 +97,20 @@ export function ScaleResultView({ result, onManual, showRaw = true }: {
           ))}
         </Table.Tbody>
       </Table>
-      <Group gap="md" align="center">
-        {result.total !== null ? (
-          <>
-            <Text>Total: <Text span fw={700}>{formatNumber(result.total)}</Text></Text>
-            {result.level ? <Badge size="lg">{result.level}</Badge> : <SettingsHint>The total does not match any level of the scale</SettingsHint>}
-          </>
-        ) : (
-          <SettingsHint>The total and level will appear when all sections are scored</SettingsHint>
-        )}
-      </Group>
+      {hideOverall ? null : (
+        <Group gap="md" align="center">
+          {result.total !== null ? (
+            <>
+              <Text>Total: <Text span fw={700}>{formatNumber(result.total)}</Text></Text>
+              {result.level ? <Badge size="lg">{result.level}</Badge> : <SettingsHint>The total does not match any level of the scale</SettingsHint>}
+            </>
+          ) : overallHint ? (
+            <SettingsHint>{overallHint}</SettingsHint>
+          ) : (
+            <SettingsHint>The total and level will appear when all sections are scored</SettingsHint>
+          )}
+        </Group>
+      )}
     </Stack>
   );
 }

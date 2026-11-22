@@ -19,17 +19,31 @@ public final class ContentCheck {
     private static final Pattern MEDIA_ID = Pattern.compile("^$|^[0-9a-fA-F-]{36}$");
 
     private final boolean strict;
+    private final String examPreset;
 
-    private ContentCheck(boolean strict) {
+    private ContentCheck(boolean strict, String examPreset) {
         this.strict = strict;
+        this.examPreset = examPreset;
     }
 
     public static ContentCheck draft() {
-        return new ContentCheck(false);
+        return new ContentCheck(false, null);
+    }
+
+    public static ContentCheck draft(String examPreset) {
+        return new ContentCheck(false, examPreset);
     }
 
     public static ContentCheck publication() {
-        return new ContentCheck(true);
+        return new ContentCheck(true, null);
+    }
+
+    public static ContentCheck publication(String examPreset) {
+        return new ContentCheck(true, examPreset);
+    }
+
+    public boolean toeflFamily() {
+        return "TOEFL".equals(examPreset);
     }
 
     public void shape(boolean condition, String field, String message) {

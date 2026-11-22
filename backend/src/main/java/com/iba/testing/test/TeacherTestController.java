@@ -1,5 +1,8 @@
 package com.iba.testing.test;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.iba.testing.common.exception.ApiException;
 import com.iba.testing.preset.PresetCatalog;
 import com.iba.testing.question.QuestionWriteRequest;
 import com.iba.testing.section.ContentService;
@@ -9,7 +12,10 @@ import com.iba.testing.section.SectionWriteRequest;
 import com.iba.testing.security.CurrentUser;
 import com.iba.testing.test.dto.CreateTestRequest;
 import com.iba.testing.test.dto.UpdateTestRequest;
+import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Valid;
+import jakarta.validation.Validator;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -30,11 +37,20 @@ public class TeacherTestController {
     private final ExamTestService tests;
     private final ContentService content;
     private final PresetCatalog presets;
+    private final ObjectMapper mapper;
+    private final Validator validator;
 
-    public TeacherTestController(ExamTestService tests, ContentService content, PresetCatalog presets) {
+    public TeacherTestController(
+            ExamTestService tests,
+            ContentService content,
+            PresetCatalog presets,
+            ObjectMapper mapper,
+            Validator validator) {
         this.tests = tests;
         this.content = content;
         this.presets = presets;
+        this.mapper = mapper;
+        this.validator = validator;
     }
 
     @GetMapping("/overview")
@@ -124,8 +140,9 @@ public class TeacherTestController {
     }
 
     @PutMapping("/tests/{id}/sections/{sectionId}")
-    public Object updateSection(@PathVariable UUID id, @PathVariable UUID sectionId, @Valid @RequestBody SectionWriteRequest request) {
-        return content.updateSection(CurrentUser.require().getId(), id, sectionId, request);
+    public Object updateSection(@PathVariable UUID id, @PathVariable UUID sectionId, @RequestBody JsonNode body) {
+        SectionWriteRequest request = validate(body, SectionWriteRequest.class);
+        return content.updateSection(CurrentUser.require().getId(), id, sectionId, request, body);
     }
 
     @DeleteMapping("/tests/{id}/sections/{sectionId}")
@@ -140,8 +157,18 @@ public class TeacherTestController {
 
     @PutMapping("/tests/{id}/sections/{sectionId}/parts/{partId}")
     public Object updatePart(@PathVariable UUID id, @PathVariable UUID sectionId, @PathVariable UUID partId,
-                             @Valid @RequestBody PartWriteRequest request) {
-        return content.updatePart(CurrentUser.require().getId(), id, sectionId, partId, request);
+                             @RequestBody JsonNode body) {
+        PartWriteRequest request = validate(body, PartWriteRequest.class);
+        return content.updatePart(CurrentUser.require().getId(), id, sectionId, partId, request, body);
+    }
+
+    private <T> T validate(JsonNode body, Class<T> type) {
+        T request = mapper.convertValue(body, type);
+        Set<ConstraintViolation<T>> violations = validator.validate(request);
+        if (!violations.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION", violations.iterator().next().getMessage());
+        }
+        return request;
     }
 
     @DeleteMapping("/tests/{id}/sections/{sectionId}/parts/{partId}")
