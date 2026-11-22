@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,6 +20,8 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
     Optional<UserAccount> findLockedById(UUID id);
 
     boolean existsByRole(UserRole role);
+
+    List<UserAccount> findByRoleAndStatus(UserRole role, UserStatus status);
 
     long countByRole(UserRole role);
 
@@ -35,4 +38,13 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
               )
             """)
     Page<UserAccount> search(UserRole role, UserStatus status, String query, Pageable pageable);
+
+    @Query("""
+            select u from UserAccount u
+            where u.role = :role
+              and u.status = :status
+              and u.id <> :selfId
+              and (:query = '' or lower(u.displayName) like lower(concat('%', :query, '%')))
+            """)
+    Page<UserAccount> searchColleagues(UserRole role, UserStatus status, UUID selfId, String query, Pageable pageable);
 }

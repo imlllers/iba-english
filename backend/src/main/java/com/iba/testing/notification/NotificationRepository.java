@@ -25,6 +25,8 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     int markAllRead(UUID userId, OffsetDateTime now);
 
     @Modifying
-    @Query("update Notification n set n.hidden = true, n.readAt = coalesce(n.readAt, :now) where n.userId = :userId and n.hidden = false")
+    @Query("update Notification n set n.hidden = true, n.readAt = coalesce(n.readAt, :now) where n.userId = :userId and n.hidden = false and n.type <> com.iba.testing.notification.NotificationType.TEST_SHARED")
     int hideAll(UUID userId, OffsetDateTime now);
+
+    Optional<Notification> findByUserIdAndDedupeKey(UUID userId, String dedupeKey);
 }

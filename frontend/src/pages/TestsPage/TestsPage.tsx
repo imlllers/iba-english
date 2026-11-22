@@ -1,5 +1,6 @@
 import { Alert, Button, Group, Popover, Stack, Table, Text, TextInput } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { IconSend } from "@tabler/icons-react";
 import { useContext, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
@@ -7,6 +8,7 @@ import { ACCESS_DATES_ENABLED, DISABLED_SUFFIX } from "@/entities/test/settings"
 import { HeaderSlotContext } from "@/app/layout/headerSlot";
 import type { AccessStatus, TestSummary } from "@/entities/test/types";
 import { CreateTestDialog } from "@/features/tests/CreateTestDialog";
+import { ShareTestDialog } from "@/features/tests/ShareTestDialog";
 import { publicLink } from "@/features/tests/publicLink";
 import { testsApi } from "@/features/tests/testsApi";
 import { errorMessage } from "@/shared/api/client";
@@ -21,7 +23,6 @@ import { PageHeader } from "@/shared/ui/PageHeader";
 import { Select } from "@/shared/ui/Select";
 import { Pagination } from "@/shared/ui/Pagination";
 import { StatusBadge } from "@/shared/ui/StatusBadge";
-import { COL } from "@/shared/ui/tableCols";
 import { TablePanel } from "@/shared/ui/TablePanel";
 import { notify } from "@/shared/ui/notify";
 
@@ -35,6 +36,7 @@ export function TestsPage() {
   const status = (params.get("status") ?? "") as AccessStatus | "";
   const examPreset = params.get("examPreset") ?? "";
   const page = Number(params.get("page") ?? 0);
+  const [sharing, setSharing] = useState<TestSummary | null>(null);
   const [removing, setRemoving] = useState<TestSummary | null>(null);
   const [linkAction, setLinkAction] = useState<{ kind: "rotate" | "revoke"; test: TestSummary } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -212,26 +214,28 @@ export function TestsPage() {
       )}
       {items.length > 0 && (
         <TablePanel>
-          <Table.ScrollContainer minWidth={COL.title + COL.type + COL.status + COL.count + COL.datetime + COL.link + COL.action}>
-            <Table>
+          <Table.ScrollContainer minWidth="100%">
+            <Table layout="fixed">
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th w={COL.title}>Название</Table.Th>
-                  <Table.Th w={COL.type} ta="center">Тип</Table.Th>
-                  <Table.Th w={COL.status} ta="center">Статус</Table.Th>
-                  <Table.Th w={COL.count} ta="center">Заданий</Table.Th>
-                  <Table.Th w={COL.datetime} ta="center">Изменён</Table.Th>
-                  <Table.Th w={COL.link} ta="center">Ссылка</Table.Th>
-                  <Table.Th w={COL.action} ta="center">Действие</Table.Th>
+                  <Table.Th w="20%">Название</Table.Th>
+                  <Table.Th w="10%" ta="center">Тип</Table.Th>
+                  <Table.Th w="15%" ta="center">Статус</Table.Th>
+                  <Table.Th w="10%" ta="center">Заданий</Table.Th>
+                  <Table.Th w="15%" ta="center">Изменён</Table.Th>
+                  <Table.Th w="15%" ta="center">Ссылка</Table.Th>
+                  <Table.Th w="15%" ta="center">Действие</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
                 {items.map((test) => (
                   <Table.Tr key={test.id}>
                     <Table.Td>
-                      <Text component={Link} to={`/teacher/tests/${test.id}`} target="_blank" rel="noopener noreferrer" fw={600} c="iba">
-                        {test.title}
-                      </Text>
+                      <Stack gap={0}>
+                        <Text component={Link} to={`/teacher/tests/${test.id}`} target="_blank" rel="noopener noreferrer" fw={600} c="iba">
+                          {test.title}
+                        </Text>
+                      </Stack>
                     </Table.Td>
                     <Table.Td ta="center" fz="md">{test.examPreset ? test.examPreset.replaceAll("_", " ") : "–"}</Table.Td>
                     <Table.Td ta="center">
@@ -265,6 +269,14 @@ export function TestsPage() {
                         </IconButton>
                         <IconButton
                           size="lg"
+                          label="Поделиться"
+                          aria-label={`Поделиться тестом «${test.title}»`}
+                          onClick={() => setSharing(test)}
+                        >
+                          <IconSend size={20} stroke={2.25} aria-hidden />
+                        </IconButton>
+                        <IconButton
+                          size="lg"
                           label="Копировать тест"
                           aria-label={`Копировать тест «${test.title}»`}
                           disabled={action.isPending}
@@ -292,6 +304,7 @@ export function TestsPage() {
       )}
       {list.data && <Pagination page={page} size={SIZE} total={list.data.total} onChange={(next) => setParam("page", String(next))} />}
       <CreateTestDialog open={params.get("create") === "1"} onClose={() => setParam("create", "")} />
+      {sharing && <ShareTestDialog test={sharing} onClose={() => setSharing(null)} />}
       {linkAction && (
         <ConfirmDialog
           open

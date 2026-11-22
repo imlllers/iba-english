@@ -29,10 +29,16 @@ public class NotificationService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void notify(UUID userId, NotificationType type, String title, String body, String link, String dedupeKey) {
+        notifyWithPayload(userId, type, title, body, link, dedupeKey, null);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void notifyWithPayload(UUID userId, NotificationType type, String title, String body, String link,
+                                  String dedupeKey, JsonNode payload) {
         if (dedupeKey != null && notifications.existsByUserIdAndDedupeKey(userId, dedupeKey)) {
             return;
         }
-        if (!preferencesOf(userId).path(type.name()).path("app").asBoolean(true)) {
+        if (!skipsPreferences(type) && !preferencesOf(userId).path(type.name()).path("app").asBoolean(true)) {
             return;
         }
         Notification item = new Notification();
@@ -43,8 +49,31 @@ public class NotificationService {
         item.setBody(body == null ? "" : body);
         item.setLink(link);
         item.setDedupeKey(dedupeKey);
+        item.setPayload(payload);
         item.setCreatedAt(OffsetDateTime.now());
         notifications.save(item);
+    }
+
+    @Transactional
+    public void resolveShare(UUID userId, String dedupeKey, String status) {
+        notifications.findByUserIdAndDedupeKey(userId, dedupeKey).ifPresent(item -> {
+            if (item.getReadAt() == null) {
+                item.setReadAt(OffsetDateTime.now());
+            }
+            ObjectNode payload = item.getPayload() == null || item.getPayload().isNull()
+                    ? mapper.createObjectNode()
+                    : item.getPayload().deepCopy();
+            payload.put("status", status);
+            item.setPayload(payload);
+        });
+    }
+
+    private boolean skipsPreferences(NotificationType type) {
+        return type == NotificationType.TEST_SHARED
+                || type == NotificationType.TEST_SHARE_ACCEPTED
+                || type == NotificationType.TEST_SHARE_DECLINED
+                || type == NotificationType.TEACHER_REGISTERED
+                || type == NotificationType.INVITE_EXPIRED;
     }
 
     @Transactional(readOnly = true)
@@ -127,6 +156,11 @@ public class NotificationService {
         }
         node.put("createdAt", item.getCreatedAt().toString());
         node.put("read", item.getReadAt() != null);
+        if (item.getPayload() == null || item.getPayload().isNull()) {
+            node.putNull("payload");
+        } else {
+            node.set("payload", item.getPayload());
+        }
         return node;
     }
 }

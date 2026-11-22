@@ -57,6 +57,12 @@ public class ExamTest {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
+    @Column(nullable = false)
+    private boolean listed = true;
+
+    @Column(name = "shared_from_name", length = 200)
+    private String sharedFromName;
+
     public UUID getId() {
         return id;
     }
@@ -143,5 +149,21 @@ public class ExamTest {
 
     public void setUpdatedAt(OffsetDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public boolean isListed() {
+        return listed;
+    }
+
+    public void setListed(boolean listed) {
+        this.listed = listed;
+    }
+
+    public String getSharedFromName() {
+        return sharedFromName;
+    }
+
+    public void setSharedFromName(String sharedFromName) {
+        this.sharedFromName = sharedFromName;
     }
 }

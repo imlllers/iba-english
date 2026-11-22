@@ -65,6 +65,7 @@ public class SecurityConfig {
                                 "/api/auth/resend-verification").permitAll()
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/teacher/notifications", "/api/teacher/notifications/**").hasAnyRole("TEACHER", "ADMIN")
                         .requestMatchers("/api/teacher/**").hasRole("TEACHER")
                         .requestMatchers("/api/auth/**").authenticated()
                         .anyRequest().denyAll())

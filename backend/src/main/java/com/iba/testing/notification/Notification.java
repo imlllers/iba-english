@@ -6,6 +6,9 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -44,6 +47,9 @@ public class Notification {
 
     @Column(nullable = false)
     private boolean hidden;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    private JsonNode payload;
 
     public UUID getId() {
         return id;
@@ -123,5 +129,13 @@ public class Notification {
 
     public void setHidden(boolean hidden) {
         this.hidden = hidden;
+    }
+
+    public JsonNode getPayload() {
+        return payload;
+    }
+
+    public void setPayload(JsonNode payload) {
+        this.payload = payload;
     }
 }

@@ -507,8 +507,12 @@ audio { width: 100%; height: var(--control-height); }
 .notification-item:hover {
   background: var(--mantine-color-gray-0);
 }
-.notification-item[data-unread] {
-  background: var(--mantine-color-iba-0);
+.notification-unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  flex: none;
 }
 
 .mantine-Notifications-root[data-position="top-right"] {

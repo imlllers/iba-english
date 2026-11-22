@@ -7,11 +7,19 @@ import { notify } from "@/shared/ui/notify";
 import { SettingsCard } from "@/shared/ui/SettingsCard";
 import { SettingsSectionTitle } from "@/shared/ui/SettingsSectionTitle";
 import { Switch } from "@/shared/ui/Switch";
-import { NOTIFICATION_GROUPS, notificationsApi, type NotificationPreferences, type NotificationType } from "./notificationsApi";
+import { useSession } from "@/features/auth/useSession";
+import {
+  ADMIN_NOTIFICATION_GROUP,
+  NOTIFICATION_GROUPS,
+  notificationsApi,
+  type NotificationPreferences,
+  type NotificationType,
+} from "./notificationsApi";
 
 const KEY = ["notifications", "preferences"];
 
 export function NotificationsSection() {
+  const session = useSession();
   const queryClient = useQueryClient();
   const prefs = useQuery({ queryKey: KEY, queryFn: notificationsApi.preferences });
   const save = useMutation({
@@ -34,15 +42,22 @@ export function NotificationsSection() {
   }
   const data = prefs.data;
   const toggle = (type: NotificationType, value: boolean) => save.mutate({ ...data, [type]: { app: value } });
+  const isAdmin = session.data?.role === "ADMIN";
+  const groups = isAdmin
+    ? [
+        ...NOTIFICATION_GROUPS.filter((group) => group.anchor !== "notif-account"),
+        ADMIN_NOTIFICATION_GROUP,
+      ]
+    : NOTIFICATION_GROUPS;
 
   return (
     <Stack gap="sm">
-      {NOTIFICATION_GROUPS.map((group) => (
+      {groups.map((group) => (
         <SettingsCard key={group.title} id={group.anchor}>
           <Stack gap="md">
             <SettingsSectionTitle>{group.title}</SettingsSectionTitle>
             {group.items.map((item) => {
-              const off = item.dated && !ACCESS_DATES_ENABLED;
+              const off = "dated" in item ? Boolean(item.dated) && !ACCESS_DATES_ENABLED : false;
               return (
                 <Switch
                   key={item.type}

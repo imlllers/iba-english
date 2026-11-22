@@ -8,6 +8,8 @@ import com.iba.testing.test.AccessDates;
 import com.iba.testing.test.ExamTest;
 import com.iba.testing.test.ExamTestRepository;
 import com.iba.testing.test.TestStatus;
+import com.iba.testing.user.UserAccountRepository;
+import com.iba.testing.user.UserRole;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -33,12 +35,23 @@ public class NotificationTriggers {
     private final ExamTestRepository tests;
     private final TestAttemptRepository attempts;
     private final JdbcTemplate jdbc;
+    private final UserAccountRepository users;
+    private final AdminNotificationService adminNotifications;
 
-    public NotificationTriggers(NotificationService notifications, ExamTestRepository tests, TestAttemptRepository attempts, JdbcTemplate jdbc) {
+    public NotificationTriggers(
+            NotificationService notifications,
+            ExamTestRepository tests,
+            TestAttemptRepository attempts,
+            JdbcTemplate jdbc,
+            UserAccountRepository users,
+            AdminNotificationService adminNotifications
+    ) {
         this.notifications = notifications;
         this.tests = tests;
         this.attempts = attempts;
         this.jdbc = jdbc;
+        this.users = users;
+        this.adminNotifications = adminNotifications;
     }
 
     @Async
@@ -63,6 +76,9 @@ public class NotificationTriggers {
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onPasswordChanged(NotificationEvents.PasswordChanged event) {
+        if (isAdmin(event.userId())) {
+            return;
+        }
         notifications.notify(event.userId(), NotificationType.PASSWORD_CHANGED,
                 "Пароль изменён",
                 "Пароль от вашей учётной записи изменён. Если это были не вы – сразу смените пароль и сообщите администратору",
@@ -77,7 +93,7 @@ public class NotificationTriggers {
         int inserted = jdbc.update(
                 "insert into known_devices (user_id, fingerprint, created_at) values (?, ?, now()) on conflict do nothing",
                 event.userId(), fingerprint);
-        if (inserted > 0 && known != null && known > 0) {
+        if (inserted > 0 && known != null && known > 0 && !isAdmin(event.userId())) {
             notifications.notify(event.userId(), NotificationType.NEW_DEVICE_LOGIN,
                     "Вход с нового устройства",
                     "Выполнен вход в вашу учётную запись с нового браузера или устройства. Если это были не вы – смените пароль",
@@ -119,6 +135,11 @@ public class NotificationTriggers {
         }
     }
 
+    @Scheduled(fixedDelay = 300_000, initialDelay = 90_000)
+    public void checkExpiredInvites() {
+        adminNotifications.processExpiredInvites();
+    }
+
     @Scheduled(cron = "0 0 9 * * *", zone = "Europe/Moscow")
     public void remindStaleReviews() {
         String day = LocalDate.now(ZONE).toString();
@@ -130,6 +151,10 @@ public class NotificationTriggers {
                     "Не проверено попыток: " + count,
                     "/teacher/results?status=NEEDS_REVIEW", "stale:" + day);
         }
+    }
+
+    private boolean isAdmin(UUID userId) {
+        return users.findById(userId).map(user -> user.getRole() == UserRole.ADMIN).orElse(false);
     }
 
     private static OffsetDateTime moment(String value) {

@@ -38,6 +38,10 @@
 - `GET /api/teacher/attempts/{id}`
 - `PUT /api/teacher/attempts/{id}/answers/{questionId}/review` – баллы, баллы по критериям, комментарий
 - `GET /api/teacher/attempts/{attemptId}/media/{mediaId}` – запись устного ответа
+- `GET /api/teacher/colleagues` – поиск коллег по имени (`q`, `page`, `size`)
+- `POST /api/teacher/tests/{id}/share` – отправить копию теста коллегам: `{ recipientIds, comment }`
+- `GET /api/teacher/shares/{id}/preview`, `GET /api/teacher/shares/{id}/media/{mediaId}/content` – предпросмотр присланного теста
+- `POST /api/teacher/shares/{id}/accept` – копия становится черновиком получателя, `POST /api/teacher/shares/{id}/decline`
 
 ## Администратор
 
@@ -47,6 +51,7 @@
 - `POST /api/admin/users/{id}/password` – новый пароль; уже открытые сессии пользователя при этом не закрываются
 - `GET /api/admin/tests`, `POST /api/admin/tests/{id}/archive`
 - `GET /api/admin/audit`
+- `GET /api/admin/invites`, `POST /api/admin/invites` – тело `{ validDays, inviteeEmail }`, оба поля необязательны, `POST /api/admin/invites/{id}/revoke`
 - `GET /api/admin/settings`, `PUT /api/admin/settings` – лимит загрузки не больше серверного `MAX_UPLOAD_BYTES`, срок хранения попыток в днях (0 – без удаления), срок ссылки для участников в часах (0–168, 0 – без ограничения, по умолчанию 12)
 
 Ответы участников администратору не отдаются.

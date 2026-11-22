@@ -1,9 +1,10 @@
-import { ActionIcon, AppShell, Box, Burger, Group, NavLink as MantineNavLink, ScrollArea, Stack, Text } from "@mantine/core";
+import { AppShell, Box, Burger, Group, NavLink as MantineNavLink, ScrollArea, Stack, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useContext } from "react";
 import { Link, Outlet, useLocation, type To } from "react-router-dom";
 import type { Role } from "@/entities/user/types";
 import { useSession } from "@/features/auth/useSession";
+import { useLogout } from "@/features/auth/useLogout";
 import { NotificationBell } from "@/features/notifications/NotificationBell";
 import {
   IconAdjustments,
@@ -115,6 +116,7 @@ export function Shell({ role }: { role: Role }) {
   const home = role === "ADMIN" ? "/admin/teachers" : "/teacher/tests";
   const location = useLocation();
   const [opened, { toggle, close }] = useDisclosure();
+  const logout = useLogout();
   return (
     <HeaderSlotProvider>
       <AppShell
@@ -214,6 +216,17 @@ export function Shell({ role }: { role: Role }) {
                 })}
               </Stack>
             </ScrollArea>
+            <Box px="md" py="sm">
+              <MantineNavLink
+                component="button"
+                type="button"
+                label="Выйти из аккаунта"
+                leftSection={<Icon name="logout" size={16} />}
+                onClick={logout}
+                {...sidebarNavLinkProps}
+                styles={TOP_LEVEL_STYLES}
+              />
+            </Box>
           </Stack>
         </AppShell.Navbar>
 
@@ -241,13 +254,7 @@ function ShellHeaderBar({ opened, onToggle }: { opened: boolean; onToggle: () =>
           className="shell-header-slot"
           style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", minWidth: 0, flex: 1 }}
         />
-        {user?.role === "TEACHER" ? (
-          <NotificationBell />
-        ) : (
-          <ActionIcon variant="subtle" color="gray" size="lg" aria-label="Уведомления – временно недоступны" disabled style={{ background: "transparent" }}>
-            <Icon name="bell" size={20} />
-          </ActionIcon>
-        )}
+        {user && (user.role === "TEACHER" || user.role === "ADMIN") && <NotificationBell />}
         {user ? (
           <Group gap="sm" wrap="nowrap" align="center" style={{ minWidth: 0 }}>
             <UserAvatar user={user} size="md" />
