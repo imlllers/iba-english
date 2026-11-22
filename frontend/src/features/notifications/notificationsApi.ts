@@ -9,7 +9,21 @@ export type NotificationType =
   | "TEST_CLOSED"
   | "RESULT_EMAIL_FAILED"
   | "PASSWORD_CHANGED"
-  | "NEW_DEVICE_LOGIN";
+  | "NEW_DEVICE_LOGIN"
+  | "TEST_SHARED"
+  | "TEST_SHARE_ACCEPTED"
+  | "TEST_SHARE_DECLINED"
+  | "TEACHER_REGISTERED"
+  | "INVITE_EXPIRED";
+
+export type TestShareNotificationPayload = {
+  shareId: string;
+  senderName: string;
+  testTitle: string;
+  examPreset: string;
+  comment: string;
+  status?: string;
+};
 
 export type AppNotification = {
   id: string;
@@ -19,6 +33,7 @@ export type AppNotification = {
   link: string | null;
   createdAt: string;
   read: boolean;
+  payload: TestShareNotificationPayload | Record<string, string> | null;
 };
 
 export type NotificationPreferences = Record<NotificationType, { app: boolean }>;
@@ -62,3 +77,16 @@ export const NOTIFICATION_GROUPS: { anchor: string; title: string; items: { type
     ],
   },
 ];
+
+export const ADMIN_NOTIFICATION_GROUP: {
+  anchor: string;
+  title: string;
+  items: { type: NotificationType; label: string; description: string }[];
+} = {
+  anchor: "notif-admin",
+  title: "Администрирование",
+  items: [
+    { type: "TEACHER_REGISTERED", label: "Новый преподаватель", description: "Преподаватель завершил регистрацию по приглашению" },
+    { type: "INVITE_EXPIRED", label: "Приглашение истекло", description: "Срок приглашения прошёл, регистрации по нему не было" },
+  ],
+};

@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.iba.testing.invite.InviteCodeRepository;
+import com.iba.testing.notification.NotificationTriggers;
+import com.iba.testing.media.MediaAssetRepository;
 import com.iba.testing.mail.MailService;
 import com.iba.testing.mail.SentMail;
 import com.iba.testing.question.Question;
@@ -27,6 +29,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -49,12 +52,14 @@ class ApiIntegrationTest {
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
+    private static final String MEDIA_DIR = createMediaDir();
+
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) throws Exception {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
-        registry.add("app.media-dir", () -> tempDir());
+        registry.add("app.media-dir", () -> MEDIA_DIR);
         registry.add("app.admin.email", () -> "admin@test.local");
         registry.add("app.admin.password", () -> "admin-password");
         registry.add("app.admin.login-secret", () -> "test-admin-secret");
@@ -80,7 +85,13 @@ class ApiIntegrationTest {
     private InviteCodeRepository inviteCodes;
 
     @Autowired
+    private MediaAssetRepository mediaAssets;
+
+    @Autowired
     private MailService mail;
+
+    @Autowired
+    private NotificationTriggers notificationTriggers;
 
     private MockHttpSession teacher;
     private MockHttpSession other;
@@ -627,6 +638,173 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void shareTestWithColleague() throws Exception {
+        JsonNode test = createTest(teacher);
+        String testId = test.path("id").asText();
+        JsonNode colleagues = read(mvc.perform(get("/api/teacher/colleagues").session(teacher)).andExpect(status().isOk()).andReturn());
+        String recipientId = read(mvc.perform(get("/api/auth/me").session(other)).andExpect(status().isOk()).andReturn())
+                .path("id").asText();
+        for (JsonNode item : colleagues.path("items")) {
+            assertFalse(item.has("email"));
+        }
+        ObjectNode shareBody = mapper.createObjectNode().put("comment", "Для вас");
+        shareBody.putArray("recipientIds").add(recipientId);
+        mvc.perform(json(post("/api/teacher/tests/" + testId + "/share"), teacher, shareBody.toString()))
+                .andExpect(status().isOk());
+        JsonNode otherList = read(mvc.perform(get("/api/teacher/tests").session(other)).andExpect(status().isOk()).andReturn());
+        assertEquals(0, otherList.path("total").asInt());
+        JsonNode notifications = read(mvc.perform(get("/api/teacher/notifications").session(other)).andExpect(status().isOk()).andReturn());
+        assertTrue(notifications.path("total").asInt() >= 1);
+        String shareId = notifications.path("items").get(0).path("payload").path("shareId").asText();
+        mvc.perform(get("/api/teacher/shares/" + shareId + "/preview").session(teacher)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/teacher/shares/" + shareId + "/preview").session(other)).andExpect(status().isOk());
+        ObjectNode rename = mapper.createObjectNode().put("title", "Изменено отправителем").put("description", "");
+        rename.set("settings", test.path("settings"));
+        mvc.perform(json(put("/api/teacher/tests/" + testId), teacher, rename.toString())).andExpect(status().isOk());
+        JsonNode previewAfterEdit = read(mvc.perform(get("/api/teacher/shares/" + shareId + "/preview").session(other))
+                .andExpect(status().isOk()).andReturn());
+        assertEquals("Reading check", previewAfterEdit.path("title").asText());
+        JsonNode accepted = read(mvc.perform(post("/api/teacher/shares/" + shareId + "/accept").session(other).with(csrf()))
+                .andExpect(status().isOk()).andReturn());
+        mvc.perform(post("/api/teacher/shares/" + shareId + "/accept").session(other).with(csrf())).andExpect(status().isConflict());
+        JsonNode afterAccept = read(mvc.perform(get("/api/teacher/notifications").session(other)).andExpect(status().isOk()).andReturn());
+        boolean keptShareNote = false;
+        for (JsonNode item : afterAccept.path("items")) {
+            if ("TEST_SHARED".equals(item.path("type").asText()) && shareId.equals(item.path("payload").path("shareId").asText())) {
+                keptShareNote = true;
+                assertEquals("ACCEPTED", item.path("payload").path("status").asText());
+            }
+        }
+        assertTrue(keptShareNote);
+        otherList = read(mvc.perform(get("/api/teacher/tests").session(other)).andExpect(status().isOk()).andReturn());
+        assertEquals(1, otherList.path("total").asInt());
+        assertEquals("Reading check", otherList.path("items").get(0).path("title").asText());
+        assertTrue(otherList.path("items").get(0).path("sharedFromName").isTextual());
+        JsonNode senderNotes = read(mvc.perform(get("/api/teacher/notifications").session(teacher)).andExpect(status().isOk()).andReturn());
+        boolean acceptedNote = false;
+        for (JsonNode item : senderNotes.path("items")) {
+            if ("TEST_SHARE_ACCEPTED".equals(item.path("type").asText())) {
+                acceptedNote = true;
+            }
+        }
+        assertTrue(acceptedNote);
+        mvc.perform(delete("/api/teacher/tests/" + testId).session(teacher).with(csrf())).andExpect(status().isOk());
+        mvc.perform(get("/api/teacher/tests/" + accepted.path("testId").asText()).session(other)).andExpect(status().isOk());
+    }
+
+    @Test
+    void shareTestDeclineNotifiesSender() throws Exception {
+        JsonNode test = createTest(teacher);
+        String testId = test.path("id").asText();
+        read(mvc.perform(get("/api/teacher/colleagues").session(teacher)).andExpect(status().isOk()).andReturn());
+        String recipientId = read(mvc.perform(get("/api/auth/me").session(other)).andExpect(status().isOk()).andReturn())
+                .path("id").asText();
+        ObjectNode shareBody = mapper.createObjectNode();
+        shareBody.putArray("recipientIds").add(recipientId);
+        mvc.perform(json(post("/api/teacher/tests/" + testId + "/share"), teacher, shareBody.toString()))
+                .andExpect(status().isOk());
+        String shareId = read(mvc.perform(get("/api/teacher/notifications").session(other)).andExpect(status().isOk()).andReturn())
+                .path("items").get(0).path("payload").path("shareId").asText();
+        mvc.perform(json(post("/api/teacher/tests/" + testId + "/share"), other,
+                "{\"recipientIds\":[\"" + recipientId + "\"]}")).andExpect(status().isNotFound());
+        mvc.perform(post("/api/teacher/shares/" + shareId + "/decline").session(other).with(csrf())).andExpect(status().isOk());
+        mvc.perform(post("/api/teacher/shares/" + shareId + "/decline").session(other).with(csrf())).andExpect(status().isConflict());
+        mvc.perform(post("/api/teacher/shares/" + shareId + "/accept").session(other).with(csrf())).andExpect(status().isConflict());
+        JsonNode otherList = read(mvc.perform(get("/api/teacher/tests").session(other)).andExpect(status().isOk()).andReturn());
+        assertEquals(0, otherList.path("total").asInt());
+    }
+
+    @Test
+    void shareAcceptTransfersAudioAndImage() throws Exception {
+        JsonNode test = createTest(teacher);
+        String testId = test.path("id").asText();
+        String sectionId = test.path("sections").get(0).path("id").asText();
+        String imageId = read(mvc.perform(multipart("/api/teacher/media")
+                .file(new MockMultipartFile("file", "photo.png", "image/png", pngBytes()))
+                .session(teacher).with(csrf())).andExpect(status().isOk()).andReturn()).path("id").asText();
+        String audioId = read(mvc.perform(multipart("/api/teacher/media")
+                .file(new MockMultipartFile("file", "clip.mp3", "audio/mpeg", mp3Bytes()))
+                .session(teacher).with(csrf())).andExpect(status().isOk()).andReturn()).path("id").asText();
+        JsonNode filled = addQuestion(teacher, testId, sectionId, "SINGLE_CHOICE");
+        JsonNode question = filled.path("sections").get(0).path("questions").get(0);
+        ObjectNode body = mapper.createObjectNode().put("type", "SINGLE_CHOICE").put("required", true);
+        body.set("promptContent", question.path("promptContent"));
+        body.set("options", question.path("options"));
+        body.set("answerKey", question.path("answerKey"));
+        body.set("scoringConfig", question.path("scoringConfig"));
+        ObjectNode settings = (ObjectNode) question.path("settings").deepCopy();
+        settings.put("mediaId", imageId);
+        ObjectNode audioItem = settings.putArray("content").addObject();
+        audioItem.put("id", "share-audio");
+        audioItem.put("kind", "audio");
+        audioItem.put("mediaId", audioId);
+        body.set("settings", settings);
+        mvc.perform(json(put("/api/teacher/tests/" + testId + "/questions/" + question.path("id").asText()), teacher, body.toString()))
+                .andExpect(status().isOk());
+        String recipientId = read(mvc.perform(get("/api/auth/me").session(other)).andExpect(status().isOk()).andReturn())
+                .path("id").asText();
+        ObjectNode shareBody = mapper.createObjectNode();
+        shareBody.putArray("recipientIds").add(recipientId);
+        mvc.perform(json(post("/api/teacher/tests/" + testId + "/share"), teacher, shareBody.toString()))
+                .andExpect(status().isOk());
+        String shareId = read(mvc.perform(get("/api/teacher/notifications").session(other)).andExpect(status().isOk()).andReturn())
+                .path("items").get(0).path("payload").path("shareId").asText();
+        String copyId = read(mvc.perform(post("/api/teacher/shares/" + shareId + "/accept").session(other).with(csrf()))
+                .andExpect(status().isOk()).andReturn()).path("testId").asText();
+        JsonNode copy = read(mvc.perform(get("/api/teacher/tests/" + copyId).session(other)).andExpect(status().isOk()).andReturn());
+        JsonNode copySettings = copy.path("sections").get(0).path("questions").get(0).path("settings");
+        String copyImageId = copySettings.path("mediaId").asText();
+        String copyAudioId = copySettings.path("content").get(0).path("mediaId").asText();
+        assertNotEquals(imageId, copyImageId);
+        assertNotEquals(audioId, copyAudioId);
+        mvc.perform(get("/api/teacher/media/" + copyImageId + "/content").session(other)).andExpect(status().isOk());
+        mvc.perform(get("/api/teacher/media/" + copyAudioId + "/content").session(other)).andExpect(status().isOk());
+        mvc.perform(get("/api/teacher/media/" + copyImageId + "/content").session(teacher)).andExpect(status().isNotFound());
+        JsonNode preview = read(mvc.perform(get("/api/teacher/tests/" + copyId + "/preview").session(other))
+                .andExpect(status().isOk()).andReturn());
+        String previewJson = preview.toString();
+        assertTrue(previewJson.contains(copyImageId));
+        assertTrue(previewJson.contains(copyAudioId));
+    }
+
+    @Test
+    void shareKeepsSenderMediaRecordWhenDiskFileMissing() throws Exception {
+        String ghostId = read(mvc.perform(multipart("/api/teacher/media")
+                .file(new MockMultipartFile("file", "ghost.png", "image/png", pngBytes()))
+                .session(teacher).with(csrf())).andExpect(status().isOk()).andReturn()).path("id").asText();
+        Files.deleteIfExists(Path.of(MEDIA_DIR).resolve(ghostId + ".png"));
+        String recipientId = read(mvc.perform(get("/api/auth/me").session(other)).andExpect(status().isOk()).andReturn())
+                .path("id").asText();
+        JsonNode test = createTest(teacher);
+        String testId = test.path("id").asText();
+        String sectionId = test.path("sections").get(0).path("id").asText();
+        attachGhostImage(teacher, testId, sectionId, ghostId);
+        ObjectNode shareBody = mapper.createObjectNode();
+        shareBody.putArray("recipientIds").add(recipientId);
+        mvc.perform(json(post("/api/teacher/tests/" + testId + "/share"), teacher, shareBody.toString()))
+                .andExpect(status().isOk());
+        String declineShareId = read(mvc.perform(get("/api/teacher/notifications").session(other)).andExpect(status().isOk()).andReturn())
+                .path("items").get(0).path("payload").path("shareId").asText();
+        JsonNode declinePreview = read(mvc.perform(get("/api/teacher/shares/" + declineShareId + "/preview").session(other))
+                .andExpect(status().isOk()).andReturn());
+        assertTrue(declinePreview.path("sections").get(0).path("questions").get(0).path("settings").path("mediaId").isNull());
+        assertFalse(declinePreview.toString().contains(ghostId));
+        mvc.perform(post("/api/teacher/shares/" + declineShareId + "/decline").session(other).with(csrf())).andExpect(status().isOk());
+        assertSenderMediaRecord(ghostId);
+
+        JsonNode testAccept = createTest(teacher);
+        String acceptTestId = testAccept.path("id").asText();
+        String acceptSectionId = testAccept.path("sections").get(0).path("id").asText();
+        attachGhostImage(teacher, acceptTestId, acceptSectionId, ghostId);
+        mvc.perform(json(post("/api/teacher/tests/" + acceptTestId + "/share"), teacher, shareBody.toString()))
+                .andExpect(status().isOk());
+        String acceptShareId = read(mvc.perform(get("/api/teacher/notifications").session(other)).andExpect(status().isOk()).andReturn())
+                .path("items").get(0).path("payload").path("shareId").asText();
+        mvc.perform(post("/api/teacher/shares/" + acceptShareId + "/accept").session(other).with(csrf())).andExpect(status().isOk());
+        assertSenderMediaRecord(ghostId);
+    }
+
+    @Test
     void adminLoginRequiresSecretAndLoginIsThrottled() throws Exception {
         mvc.perform(json(post("/api/auth/login"), null, "{\"email\":\"admin@test.local\",\"password\":\"admin-password\"}"))
                 .andExpect(status().isUnauthorized());
@@ -645,6 +823,117 @@ class ApiIntegrationTest {
         }
         mvc.perform(json(post("/api/auth/login"), null, "{\"email\":\"" + email + "\",\"password\":\"throttle-password\"}"))
                 .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void adminNotifiedWhenTeacherCompletesInviteRegistration() throws Exception {
+        JsonNode invite = read(mvc.perform(json(post("/api/admin/invites"), admin, "{\"validDays\":7}"))
+                .andExpect(status().isOk()).andReturn());
+        String code = invite.path("code").asText();
+        String email = "reg" + UUID.randomUUID().toString().substring(0, 8) + "@test.local";
+        String displayName = "Иван Преподаватель";
+        ObjectNode body = mapper.createObjectNode()
+                .put("inviteCode", code)
+                .put("email", email)
+                .put("displayName", displayName)
+                .put("password", "register-password");
+        mail.drainOutbox();
+        mvc.perform(json(post("/api/auth/register"), null, body.toString())).andExpect(status().isOk());
+        String token = tokenFromMail(mail.drainOutbox().getFirst(), "/verify-email?token=");
+        mvc.perform(json(post("/api/auth/verify-email"), null, "{\"token\":\"" + token + "\"}"))
+                .andExpect(status().isOk());
+        JsonNode item = notificationByType(admin, "TEACHER_REGISTERED", 5_000);
+        assertTrue(item != null && !item.isNull(), "ожидалось уведомление TEACHER_REGISTERED");
+        assertEquals("Новый преподаватель", item.path("title").asText());
+        assertEquals(displayName + " зарегистрировался по приглашению", item.path("body").asText());
+        assertEquals("/admin/teachers", item.path("link").asText());
+    }
+
+    @Test
+    void adminNotifiedOnceWhenInviteExpires() throws Exception {
+        JsonNode invite = read(mvc.perform(json(post("/api/admin/invites"), admin, "{\"validDays\":7}"))
+                .andExpect(status().isOk()).andReturn());
+        String code = invite.path("code").asText();
+        UUID inviteId = UUID.fromString(invite.path("id").asText());
+        inviteCodes.findById(inviteId).ifPresent(row -> {
+            row.setExpiresAt(java.time.OffsetDateTime.now().minusHours(1));
+            row.setExpiryNotifiedAt(null);
+            inviteCodes.save(row);
+        });
+        notificationTriggers.checkExpiredInvites();
+        JsonNode first = notificationByType(admin, "INVITE_EXPIRED", 2_000);
+        assertTrue(first != null && !first.isNull());
+        assertEquals("Приглашение истекло", first.path("title").asText());
+        assertEquals("Приглашение " + code + " истекло", first.path("body").asText());
+        assertEquals("/admin/teachers#invites", first.path("link").asText());
+        notificationTriggers.checkExpiredInvites();
+        assertEquals(1, countNotifications(admin, "INVITE_EXPIRED"));
+        assertTrue(inviteCodes.findById(inviteId).map(row -> row.getExpiryNotifiedAt() != null).orElse(false));
+    }
+
+    @Test
+    void expiredInviteNotifiedOnlyOnceAndSkipsLegacy() throws Exception {
+        JsonNode invite = read(mvc.perform(json(post("/api/admin/invites"), admin, "{\"validDays\":1}"))
+                .andExpect(status().isOk()).andReturn());
+        UUID inviteId = UUID.fromString(invite.path("id").asText());
+        java.time.OffsetDateTime past = java.time.OffsetDateTime.now().minusDays(2);
+        inviteCodes.findById(inviteId).ifPresent(row -> {
+            row.setExpiresAt(past);
+            row.setExpiryNotifiedAt(past);
+            inviteCodes.save(row);
+        });
+        int before = countNotifications(admin, "INVITE_EXPIRED");
+        notificationTriggers.checkExpiredInvites();
+        assertEquals(before, countNotifications(admin, "INVITE_EXPIRED"));
+    }
+
+    @Test
+    void adminDoesNotGetPasswordOrDeviceNotifications() throws Exception {
+        try {
+            mvc.perform(json(post("/api/auth/password"), admin, "{\"currentPassword\":\"admin-password\",\"newPassword\":\"admin-new-password1\"}"))
+                    .andExpect(status().isOk());
+            admin = login("admin@test.local", "admin-new-password1");
+            mvc.perform(json(post("/api/auth/login"), null,
+                            "{\"email\":\"admin@test.local\",\"password\":\"admin-new-password1\",\"adminSecret\":\"test-admin-secret\"}")
+                            .header("User-Agent", "IntegrationTest/NewDevice"))
+                    .andExpect(status().isOk());
+            awaitNotificationAbsent(admin, "PASSWORD_CHANGED", 3_000);
+            awaitNotificationAbsent(admin, "NEW_DEVICE_LOGIN", 3_000);
+        } finally {
+            admin = login("admin@test.local", "admin-new-password1");
+            mvc.perform(json(post("/api/auth/password"), admin, "{\"currentPassword\":\"admin-new-password1\",\"newPassword\":\"admin-password\"}"))
+                    .andExpect(status().isOk());
+        }
+    }
+
+    private JsonNode notificationByType(MockHttpSession session, String type, long timeoutMs) throws Exception {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            for (JsonNode item : read(mvc.perform(get("/api/teacher/notifications").session(session))
+                    .andExpect(status().isOk()).andReturn()).path("items")) {
+                if (type.equals(item.path("type").asText())) {
+                    return item;
+                }
+            }
+            Thread.sleep(50);
+        }
+        return null;
+    }
+
+    private void awaitNotificationAbsent(MockHttpSession session, String type, long timeoutMs) throws Exception {
+        JsonNode found = notificationByType(session, type, timeoutMs);
+        assertTrue(found == null || found.isNull(), "не ожидалось уведомление " + type);
+    }
+
+    private int countNotifications(MockHttpSession session, String type) throws Exception {
+        int count = 0;
+        for (JsonNode item : read(mvc.perform(get("/api/teacher/notifications?size=50").session(session))
+                .andExpect(status().isOk()).andReturn()).path("items")) {
+            if (type.equals(item.path("type").asText())) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private JsonNode createTest(MockHttpSession session) throws Exception {
@@ -679,11 +968,52 @@ class ApiIntegrationTest {
         return mapper.readTree(result.getResponse().getContentAsString());
     }
 
-    private static String tempDir() {
+    private static String createMediaDir() {
         try {
             return Files.createTempDirectory("iba-media").toString();
         } catch (Exception exception) {
             throw new IllegalStateException(exception);
         }
+    }
+
+    private void attachGhostImage(MockHttpSession session, String testId, String sectionId, String imageId) throws Exception {
+        JsonNode filled = addQuestion(session, testId, sectionId, "SINGLE_CHOICE");
+        JsonNode question = filled.path("sections").get(0).path("questions").get(0);
+        ObjectNode body = mapper.createObjectNode().put("type", "SINGLE_CHOICE").put("required", true);
+        body.set("promptContent", question.path("promptContent"));
+        body.set("options", question.path("options"));
+        body.set("answerKey", question.path("answerKey"));
+        body.set("scoringConfig", question.path("scoringConfig"));
+        ObjectNode settings = (ObjectNode) question.path("settings").deepCopy();
+        settings.put("mediaId", imageId);
+        body.set("settings", settings);
+        mvc.perform(json(put("/api/teacher/tests/" + testId + "/questions/" + question.path("id").asText()), session, body.toString()))
+                .andExpect(status().isOk());
+    }
+
+    private void assertSenderMediaRecord(String mediaId) {
+        assertTrue(mediaAssets.findById(UUID.fromString(mediaId)).isPresent());
+    }
+
+    private static byte[] pngBytes() {
+        return new byte[] {
+                (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+                0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+                0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+                0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, (byte) 0xC4,
+                (byte) 0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41,
+                0x54, 0x78, (byte) 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+                0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, (byte) 0xB4, 0x00,
+                0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, (byte) 0xAE,
+                0x42, 0x60, (byte) 0x82
+        };
+    }
+
+    private static byte[] mp3Bytes() {
+        byte[] bytes = new byte[32];
+        bytes[0] = 'I';
+        bytes[1] = 'D';
+        bytes[2] = '3';
+        return bytes;
     }
 }

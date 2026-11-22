@@ -18,4 +18,12 @@ public interface InviteCodeRepository extends JpaRepository<InviteCode, UUID> {
             order by i.createdAt desc
             """)
     List<InviteCode> findActive(OffsetDateTime now);
+
+    @Query("""
+            select i from InviteCode i
+            where i.usedAt is null and i.revokedAt is null and i.expiresAt <= :now and i.expiryNotifiedAt is null
+            """)
+    List<InviteCode> findExpiredUnnotified(OffsetDateTime now);
+
+    Optional<InviteCode> findFirstByUsedBy(UUID usedBy);
 }

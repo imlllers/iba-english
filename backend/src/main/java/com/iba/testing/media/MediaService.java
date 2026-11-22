@@ -38,6 +38,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Locale;
 import java.util.Map;
@@ -265,6 +266,42 @@ public class MediaService {
         asset.setInLibrary(false);
         asset.setFolder(null);
         assets.save(asset);
+    }
+
+    @Transactional
+    public Optional<MediaAsset> cloneForOwner(MediaAsset source, UserAccount owner) {
+        Path sourcePath = directory().resolve(source.getStorageKey());
+        if (!Files.exists(sourcePath)) {
+            return Optional.empty();
+        }
+        UUID id = UUID.randomUUID();
+        String extension = source.getStorageKey().contains(".")
+                ? source.getStorageKey().substring(source.getStorageKey().lastIndexOf('.') + 1)
+                : "bin";
+        String key = id + "." + extension;
+        try {
+            Files.copy(sourcePath, directory().resolve(key));
+        } catch (IOException exception) {
+            return Optional.empty();
+        }
+        MediaAsset clone = new MediaAsset();
+        clone.setId(id);
+        clone.setOwner(owner);
+        clone.setStorageKey(key);
+        clone.setOriginalFilename(source.getOriginalFilename());
+        clone.setMimeType(source.getMimeType());
+        clone.setSizeBytes(source.getSizeBytes());
+        clone.setDurationSeconds(source.getDurationSeconds());
+        clone.setInLibrary(false);
+        clone.setCreatedAt(OffsetDateTime.now());
+        return Optional.of(assets.save(clone));
+    }
+
+  public void deleteAssetBytes(MediaAsset asset) {
+        try {
+            Files.deleteIfExists(directory().resolve(asset.getStorageKey()));
+        } catch (IOException ignored) {
+        }
     }
 
     @Transactional(readOnly = true)

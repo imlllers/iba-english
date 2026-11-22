@@ -15,6 +15,8 @@ public interface ExamTestRepository extends JpaRepository<ExamTest, UUID> {
 
     long countByOwnerAndStatus(UserAccount owner, TestStatus status);
 
+    long countByOwnerAndStatusAndListedTrue(UserAccount owner, TestStatus status);
+
     long countByStatus(TestStatus status);
 
     java.util.List<ExamTest> findByStatus(TestStatus status);
@@ -22,6 +24,7 @@ public interface ExamTestRepository extends JpaRepository<ExamTest, UUID> {
     @Query("""
             select t from ExamTest t
             where t.owner = :owner
+              and t.listed = true
               and (:status is null or t.status = :status)
               and (
                 :examPreset is null
@@ -34,7 +37,8 @@ public interface ExamTestRepository extends JpaRepository<ExamTest, UUID> {
 
     @Query("""
             select t from ExamTest t
-            where (:status is null or t.status = :status)
+            where t.listed = true
+              and (:status is null or t.status = :status)
               and (
                 :query = ''
                 or lower(t.title) like lower(concat('%', :query, '%'))

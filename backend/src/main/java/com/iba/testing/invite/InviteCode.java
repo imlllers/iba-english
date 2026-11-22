@@ -21,6 +21,9 @@ public class InviteCode {
     @Column(name = "code", length = 32)
     private String code;
 
+    @Column(name = "invitee_email")
+    private String inviteeEmail;
+
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 
@@ -39,6 +42,9 @@ public class InviteCode {
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
+    @Column(name = "expiry_notified_at")
+    private OffsetDateTime expiryNotifiedAt;
+
     public UUID getId() {
         return id;
     }
@@ -53,6 +59,14 @@ public class InviteCode {
 
     public void setCode(String code) {
         this.code = code;
+    }
+
+    public String getInviteeEmail() {
+        return inviteeEmail;
+    }
+
+    public void setInviteeEmail(String inviteeEmail) {
+        this.inviteeEmail = inviteeEmail;
     }
 
     public String getCodeHash() {
@@ -109,6 +123,14 @@ public class InviteCode {
 
     public void setCreatedAt(OffsetDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public OffsetDateTime getExpiryNotifiedAt() {
+        return expiryNotifiedAt;
+    }
+
+    public void setExpiryNotifiedAt(OffsetDateTime expiryNotifiedAt) {
+        this.expiryNotifiedAt = expiryNotifiedAt;
     }
 
     public boolean isActive(OffsetDateTime now) {

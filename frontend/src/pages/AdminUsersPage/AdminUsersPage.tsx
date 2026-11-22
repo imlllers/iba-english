@@ -1,6 +1,7 @@
 import { ActionIcon, Alert, Button, Group, Popover, Stack, Table, Text, TextInput } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { HeaderSlotContext } from "@/app/layout/headerSlot";
 import type { Role, User, UserStatus } from "@/entities/user/types";
@@ -21,7 +22,6 @@ import { PageHeader } from "@/shared/ui/PageHeader";
 import { Select } from "@/shared/ui/Select";
 import { Pagination } from "@/shared/ui/Pagination";
 import { SettingsCard } from "@/shared/ui/SettingsCard";
-import { SettingsHint } from "@/shared/ui/SettingsHint";
 import { SettingsSectionTitle } from "@/shared/ui/SettingsSectionTitle";
 import { StatusBadge } from "@/shared/ui/StatusBadge";
 import { COL } from "@/shared/ui/tableCols";
@@ -36,6 +36,7 @@ type Pending =
 
 export function AdminUsersPage() {
   const session = useSession();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [q, setQ] = useState("");
   const [role, setRole] = useState<Role | "">("");
@@ -60,6 +61,13 @@ export function AdminUsersPage() {
     queryFn: () => adminApi.users({ q: search, role, status, page, size: SIZE }),
     placeholderData: (previous) => previous,
   });
+  useEffect(() => {
+    if (location.hash !== "#invites") return;
+    window.requestAnimationFrame(() => {
+      document.getElementById("invites")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [location.hash]);
+
   const invites = useQuery({
     queryKey: ["admin-invites"],
     queryFn: () => adminApi.invites(),
@@ -197,13 +205,10 @@ export function AdminUsersPage() {
         }
       />
 
-      <SettingsCard>
+      <SettingsCard id="invites">
         <Stack gap="md">
           <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
-            <Stack gap={6}>
-              <SettingsSectionTitle>Активные приглашения</SettingsSectionTitle>
-              <SettingsHint>Код действует до срока или отзыва. После регистрации приглашение исчезает из списка</SettingsHint>
-            </Stack>
+            <SettingsSectionTitle>Активные приглашения</SettingsSectionTitle>
             <Button leftSection={<Icon name="plus" />} variant="default" style={{ flex: "none" }} onClick={() => setInviting(true)}>
               Приглашение
             </Button>
@@ -213,7 +218,9 @@ export function AdminUsersPage() {
             <Alert color="red" variant="light" role="alert">{errorMessage(invites.error, "Не удалось загрузить приглашения")}</Alert>
           )}
           {invites.data && inviteItems.length === 0 && (
-            <SettingsHint>Создайте код и передайте его преподавателю</SettingsHint>
+            <EmptyState title="Приглашений пока нет" muted>
+              Создайте код и передайте его преподавателю
+            </EmptyState>
           )}
           {inviteItems.length > 0 && (
             <Table.ScrollContainer minWidth={COL.name + COL.datetime + COL.datetime + COL.actionWide}>

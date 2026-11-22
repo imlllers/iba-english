@@ -1,0 +1,1 @@
+ALTER TABLE invite_codes ADD COLUMN invitee_email VARCHAR(255);

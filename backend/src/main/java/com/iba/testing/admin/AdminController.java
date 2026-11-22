@@ -80,7 +80,8 @@ public class AdminController {
     @PostMapping("/invites")
     public Object createInvite(@Valid @RequestBody(required = false) CreateInviteRequest request) {
         Integer days = request == null ? null : request.validDays();
-        return invites.create(CurrentUser.require().getId(), days);
+        String inviteeEmail = request == null ? null : request.inviteeEmail();
+        return invites.create(CurrentUser.require().getId(), days, inviteeEmail);
     }
 
     @PostMapping("/invites/{id}/revoke")
@@ -139,6 +140,6 @@ public class AdminController {
     public record SettingsRequest(Long maxUploadBytes, Map<String, Long> uploadLimits, @NotNull Integer attemptRetentionDays, @NotNull Integer linkLifetimeHours) {
     }
 
-    public record CreateInviteRequest(@Min(1) @Max(90) Integer validDays) {
+    public record CreateInviteRequest(@Min(1) @Max(90) Integer validDays, @Email String inviteeEmail) {
     }
 }

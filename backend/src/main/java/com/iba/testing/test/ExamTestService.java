@@ -36,7 +36,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -62,11 +61,13 @@ public class ExamTestService {
     private final AuditService audit;
     private final PlatformService platform;
     private final ObjectMapper mapper;
+    private final TestCopyService copies;
 
     public ExamTestService(ExamTestRepository tests, TestSectionRepository sections, SectionPartRepository parts,
                            QuestionRepository questions, TestVersionRepository versions, TestAttemptRepository attempts,
                            ExamAccess access, TestViews views, PresetCatalog presets, ExamTemplateService examTemplates,
-                           ScoreScaleService scoreScales, QuestionEngines engines, AuditService audit, PlatformService platform, ObjectMapper mapper) {
+                           ScoreScaleService scoreScales, QuestionEngines engines, AuditService audit, PlatformService platform,
+                           ObjectMapper mapper, TestCopyService copies) {
         this.tests = tests;
         this.sections = sections;
         this.parts = parts;
@@ -82,6 +83,7 @@ public class ExamTestService {
         this.audit = audit;
         this.platform = platform;
         this.mapper = mapper;
+        this.copies = copies;
     }
 
     @Transactional(readOnly = true)
@@ -453,93 +455,8 @@ public class ExamTestService {
     @Transactional
     public ObjectNode duplicate(UUID ownerId, UUID testId) {
         ExamTest source = access.requireOwned(testId, ownerId);
-        OffsetDateTime now = OffsetDateTime.now();
-        ExamTest copy = new ExamTest();
-        copy.setId(UUID.randomUUID());
-        copy.setOwner(source.getOwner());
-        String title = source.getTitle() + " (копия)";
-        copy.setTitle(title.length() > 200 ? title.substring(0, 200) : title);
-        copy.setDescription(source.getDescription());
-        copy.setExamPreset(source.getExamPreset());
-        copy.setStatus(TestStatus.DRAFT);
-        copy.setSettings(source.getSettings().deepCopy());
-        copy.setCreatedAt(now);
-        copy.setUpdatedAt(now);
-        tests.save(copy);
-        Map<UUID, UUID> sectionIds = new HashMap<>();
-        for (TestSection section : sections.findByTestOrderByOrderIndexAsc(source)) {
-            TestSection sectionCopy = new TestSection();
-            sectionCopy.setId(UUID.randomUUID());
-            sectionCopy.setTest(copy);
-            sectionCopy.setTitle(section.getTitle());
-            sectionCopy.setInstructions(section.getInstructions());
-            sectionCopy.setItems(section.getItems() == null ? ContentNodes.array() : section.getItems().deepCopy());
-            sectionCopy.setOrderIndex(section.getOrderIndex());
-            sectionCopy.setSectionType(section.getSectionType());
-            sectionCopy.setTimeLimitMinutes(section.getTimeLimitMinutes());
-            sectionCopy.setTimeLimitSeconds(section.getTimeLimitSeconds());
-            sectionCopy.setAllowBackToQuestions(section.getAllowBackToQuestions());
-            sectionCopy.setAllowBackToPart(section.getAllowBackToPart());
-            sections.save(sectionCopy);
-            sectionIds.put(section.getId(), sectionCopy.getId());
-            Map<UUID, SectionPart> partMap = new HashMap<>();
-            for (SectionPart part : parts.findBySectionOrderByOrderIndexAsc(section)) {
-                SectionPart partCopy = new SectionPart();
-                partCopy.setId(UUID.randomUUID());
-                partCopy.setSection(sectionCopy);
-                partCopy.setTitle(part.getTitle());
-                partCopy.setInstructions(part.getInstructions());
-                partCopy.setItems(part.getItems() == null ? ContentNodes.array() : part.getItems().deepCopy());
-                partCopy.setTimeLimitMinutes(part.getTimeLimitMinutes());
-                partCopy.setTimeLimitSeconds(part.getTimeLimitSeconds());
-                partCopy.setOneQuestionPerPage(part.getOneQuestionPerPage());
-                partCopy.setOrderIndex(part.getOrderIndex());
-                parts.save(partCopy);
-                partMap.put(part.getId(), partCopy);
-            }
-            for (Question question : questions.findBySectionOrderByOrderIndexAsc(section)) {
-                Question questionCopy = new Question();
-                questionCopy.setId(UUID.randomUUID());
-                questionCopy.setSection(sectionCopy);
-                if (question.getPart() != null) {
-                    questionCopy.setPart(partMap.get(question.getPart().getId()));
-                }
-                questionCopy.setType(question.getType());
-                questionCopy.setPromptContent(question.getPromptContent().deepCopy());
-                questionCopy.setOptions(question.getOptions().deepCopy());
-                questionCopy.setAnswerKey(question.getAnswerKey().deepCopy());
-                questionCopy.setScoringConfig(question.getScoringConfig().deepCopy());
-                questionCopy.setOrderIndex(question.getOrderIndex());
-                questionCopy.setRequired(question.isRequired());
-                questionCopy.setSettings(question.getSettings().deepCopy());
-                questions.save(questionCopy);
-            }
-        }
-        remapScoreScaleSections(copy, sectionIds);
+        ExamTest copy = copies.copy(source, source.getOwner(), TestCopyService.CopyOptions.selfDuplicate());
         return detail(copy);
-    }
-
-    private void remapScoreScaleSections(ExamTest test, Map<UUID, UUID> sectionIds) {
-        JsonNode mapping = test.getSettings().path("scoreScale").path("sections");
-        if (!mapping.isArray()) {
-            return;
-        }
-        for (JsonNode item : mapping) {
-            if (!(item instanceof ObjectNode entry) || !entry.path("sectionId").isTextual()) {
-                continue;
-            }
-            try {
-                UUID next = sectionIds.get(UUID.fromString(entry.path("sectionId").asText()));
-                if (next != null) {
-                    entry.put("sectionId", next.toString());
-                } else {
-                    entry.remove("sectionId");
-                }
-            } catch (IllegalArgumentException ignored) {
-                entry.remove("sectionId");
-            }
-        }
-        tests.save(test);
     }
 
     @Transactional
@@ -612,8 +529,8 @@ public class ExamTestService {
     public ObjectNode overview(UUID ownerId) {
         var owner = access.requireUser(ownerId);
         ObjectNode node = mapper.createObjectNode();
-        node.put("drafts", tests.countByOwnerAndStatus(owner, TestStatus.DRAFT));
-        node.put("published", tests.countByOwnerAndStatus(owner, TestStatus.PUBLISHED));
+        node.put("drafts", tests.countByOwnerAndStatusAndListedTrue(owner, TestStatus.DRAFT));
+        node.put("published", tests.countByOwnerAndStatusAndListedTrue(owner, TestStatus.PUBLISHED));
         node.put("needsReview", attempts.countByStatusAndTestVersionTestOwnerId(AttemptStatus.NEEDS_REVIEW, ownerId));
         var recent = tests.searchOwned(owner, null, null, "", PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "updatedAt")));
         var recentNodes = node.putArray("recent");
@@ -656,6 +573,9 @@ public class ExamTestService {
             node.put("publicTokenExpiresAt", test.getPublicTokenExpiresAt().toString());
         } else {
             node.putNull("publicTokenExpiresAt");
+        }
+        if (test.getSharedFromName() != null && !test.getSharedFromName().isBlank()) {
+            node.put("sharedFromName", test.getSharedFromName());
         }
         return node;
     }

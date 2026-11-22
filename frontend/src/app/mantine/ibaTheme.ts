@@ -198,6 +198,20 @@ export const ibaTheme = createTheme({
         },
       },
     },
+    MultiSelect: {
+      defaultProps: { radius: "md", size: "md" },
+      styles: {
+        label: {
+          fontSize: "var(--mantine-font-size-sm)",
+          lineHeight: "var(--mantine-line-height-sm)",
+          fontWeight: 600,
+        },
+        input: {
+          minHeight: "var(--input-height-md)",
+          "&:focus, &:focus-within": { outline: "none", boxShadow: "none" },
+        },
+      },
+    },
     NumberInput: {
       defaultProps: { radius: "md", size: "md" },
       styles: {

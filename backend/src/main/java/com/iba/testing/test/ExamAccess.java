@@ -22,7 +22,7 @@ public class ExamAccess {
     public ExamTest requireOwned(UUID testId, UUID ownerId) {
         ExamTest test = tests.findById(testId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Тест не найден"));
-        if (!test.getOwner().getId().equals(ownerId)) {
+        if (!test.getOwner().getId().equals(ownerId) || !test.isListed()) {
             throw new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "Тест не найден");
         }
         return test;

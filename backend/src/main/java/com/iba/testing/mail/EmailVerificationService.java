@@ -3,9 +3,12 @@ package com.iba.testing.mail;
 import com.iba.testing.audit.AuditService;
 import com.iba.testing.common.exception.ApiException;
 import com.iba.testing.config.AppProperties;
+import com.iba.testing.invite.InviteCodeRepository;
+import com.iba.testing.notification.AdminNotificationService;
 import com.iba.testing.platform.PlatformService;
 import com.iba.testing.user.UserAccount;
 import com.iba.testing.user.UserAccountRepository;
+import com.iba.testing.user.UserRole;
 import com.iba.testing.user.UserStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +35,8 @@ public class EmailVerificationService {
     private final PlatformService platform;
     private final AppProperties properties;
     private final AuditService audit;
+    private final InviteCodeRepository invites;
+    private final AdminNotificationService adminNotifications;
     private final SecureRandom random = new SecureRandom();
 
     public EmailVerificationService(
@@ -40,7 +45,9 @@ public class EmailVerificationService {
             MailService mail,
             PlatformService platform,
             AppProperties properties,
-            AuditService audit
+            AuditService audit,
+            InviteCodeRepository invites,
+            AdminNotificationService adminNotifications
     ) {
         this.users = users;
         this.tokens = tokens;
@@ -48,6 +55,8 @@ public class EmailVerificationService {
         this.platform = platform;
         this.properties = properties;
         this.audit = audit;
+        this.invites = invites;
+        this.adminNotifications = adminNotifications;
     }
 
     @Transactional
@@ -114,6 +123,9 @@ public class EmailVerificationService {
         tokens.saveAndFlush(token);
         tokens.deleteUnusedByUserId(account.getId());
         audit.record(account.getId(), "EMAIL_VERIFIED", "USER", account.getId());
+        if (account.getRole() == UserRole.TEACHER && invites.findFirstByUsedBy(account.getId()).isPresent()) {
+            adminNotifications.teacherRegisteredViaInvite(account);
+        }
     }
 
     private String generateToken() {

@@ -108,6 +108,7 @@ export type TestSummary = {
   hasUnpublishedChanges?: boolean;
   ownerEmail?: string;
   ownerName?: string;
+  sharedFromName?: string;
 };
 
 export type ExamTest = TestSummary & {

@@ -35,7 +35,8 @@ class ExamTestServiceSettingsTest {
             mock(QuestionEngines.class),
             mock(AuditService.class),
             mock(PlatformService.class),
-            new ObjectMapper());
+            new ObjectMapper(),
+            mock(TestCopyService.class));
 
     @Test
     void cleanSettingsDefaultsTimingFlagsOff() {

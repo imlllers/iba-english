@@ -59,7 +59,7 @@ public class InviteService {
     }
 
     @Transactional
-    public ObjectNode create(UUID actorId, Integer validDays) {
+    public ObjectNode create(UUID actorId, Integer validDays, String inviteeEmail) {
         int days = validDays == null ? DEFAULT_DAYS : validDays;
         if (days < 1 || days > MAX_DAYS) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION", "Срок приглашения – от 1 до 90 дней");
@@ -70,6 +70,9 @@ public class InviteService {
         invite.setId(UUID.randomUUID());
         invite.setCodeHash(hash(code));
         invite.setCode(code);
+        if (inviteeEmail != null && !inviteeEmail.isBlank()) {
+            invite.setInviteeEmail(inviteeEmail.trim().toLowerCase());
+        }
         invite.setCreatedBy(actorId);
         invite.setExpiresAt(now.plusDays(days));
         invite.setCreatedAt(now);
@@ -171,6 +174,11 @@ public class InviteService {
             node.putNull("revokedAt");
         } else {
             node.put("revokedAt", invite.getRevokedAt().toString());
+        }
+        if (invite.getInviteeEmail() == null) {
+            node.putNull("inviteeEmail");
+        } else {
+            node.put("inviteeEmail", invite.getInviteeEmail());
         }
         return node;
     }

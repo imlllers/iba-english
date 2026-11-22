@@ -18,6 +18,7 @@ const TestsPage = page(() => import("@/pages/TestsPage/TestsPage"), "TestsPage")
 const TestBuilderPage = page(() => import("@/pages/TestBuilderPage/TestBuilderPage"), "TestBuilderPage");
 const TestSettingsPage = page(() => import("@/pages/TestSettingsPage/TestSettingsPage"), "TestSettingsPage");
 const PreviewPage = page(() => import("@/pages/PreviewPage/PreviewPage"), "PreviewPage");
+const SharePreviewPage = page(() => import("@/pages/SharePreviewPage/SharePreviewPage"), "SharePreviewPage");
 const MediaPage = page(() => import("@/pages/MediaPage/MediaPage"), "MediaPage");
 const ResultsPage = page(() => import("@/pages/ResultsPage/ResultsPage"), "ResultsPage");
 const ProfilePage = page(() => import("@/pages/ProfilePage/ProfilePage"), "ProfilePage");
@@ -53,6 +54,7 @@ export function AppRouter() {
             <Route path="/teacher/tests/:testId" element={<TestBuilderPage />} />
             <Route path="/teacher/tests/:testId/settings" element={<TestSettingsPage />} />
             <Route path="/teacher/tests/:testId/preview" element={<PreviewPage />} />
+            <Route path="/teacher/shares/:shareId/preview" element={<SharePreviewPage />} />
           </Route>
           <Route element={<RequireRole role="ADMIN" />}>
             <Route path="/admin" element={<Navigate to="/admin/teachers" replace />} />
