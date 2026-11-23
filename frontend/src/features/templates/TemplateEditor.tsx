@@ -42,11 +42,16 @@ import { SettingsSectionTitle } from "@/shared/ui/SettingsSectionTitle";
 import { Switch } from "@/shared/ui/Switch";
 
 const PART_SWITCH_COL = 320;
-const PER_PAGE_OPTIONS = [
-  { value: "inherit", label: "Как в тесте" },
-  { value: "one", label: "По одному" },
-  { value: "all", label: "Все сразу" },
-];
+function partPerPageOptions(defaultOneQuestionPerPage: boolean) {
+  return [
+    {
+      value: "inherit",
+      label: `Как во всём тесте (${defaultOneQuestionPerPage ? "по одному" : "все на одном экране"})`,
+    },
+    { value: "one", label: "По одному на экране" },
+    { value: "all", label: "Все на одном экране" },
+  ];
+}
 const PART_ACTION_COL = 34;
 const PARTS_TABLE_STYLES = {
   th: { paddingLeft: 0, paddingRight: 0 },
@@ -442,6 +447,9 @@ function SectionDialog({ section, creating, settings, onClose, onSave }: {
     setParts((current) => current.map((item) => (item.id === id ? { ...item, ...next } : item)));
   const problem = !draft.title.trim() ? "Укажите название секции" : null;
 
+  const defaultOneQuestionPerPage = settings.oneQuestionPerPage !== false;
+  const perPageOptions = partPerPageOptions(defaultOneQuestionPerPage);
+
   const save = () => {
     setSubmitted(true);
     if (problem) return;
@@ -509,7 +517,7 @@ function SectionDialog({ section, creating, settings, onClose, onSave }: {
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Название</Table.Th>
-                  <Table.Th w={PART_SWITCH_COL} ta="center">Вопросы на странице</Table.Th>
+                  <Table.Th w={PART_SWITCH_COL} ta="center">Показ вопросов в этой части</Table.Th>
                   <Table.Th w={PART_ACTION_COL} />
                 </Table.Tr>
               </Table.Thead>
@@ -528,8 +536,8 @@ function SectionDialog({ section, creating, settings, onClose, onSave }: {
                       <Group justify="center">
                         <SegmentedControl
                           size="sm"
-                          aria-label={`Часть ${index + 1}: вопросы на странице`}
-                          data={PER_PAGE_OPTIONS}
+                          aria-label={`Часть ${index + 1}: показ вопросов в этой части`}
+                          data={perPageOptions}
                           value={part.oneQuestionPerPage === null ? "inherit" : part.oneQuestionPerPage ? "one" : "all"}
                           onChange={(value) => setPart(part.id, { oneQuestionPerPage: value === "inherit" ? null : value === "one" })}
                         />
@@ -545,6 +553,7 @@ function SectionDialog({ section, creating, settings, onClose, onSave }: {
               </Table.Tbody>
             </Table>
           )}
+          {parts.length > 0 ? <SettingsHint>Можно задать отдельно для этой части</SettingsHint> : null}
           <Button
             variant="subtle"
             size="compact-sm"

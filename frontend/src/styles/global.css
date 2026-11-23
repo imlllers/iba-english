@@ -124,8 +124,8 @@ h1, h2, h3, h4, h5, h6, p, ul, ol, figure, blockquote { margin: 0; }
 .runner-toefl-chrome img {
   filter: brightness(0) invert(1);
 }
-[data-runner-layout] [data-exam="TOEFL"] .question-prompt-row .iba-prompt,
-[data-runner-layout] [data-exam="TOEFL"] .question-prompt-row .iba-prompt :where(p, h2, h3, li) {
+[data-exam="TOEFL"] .question-prompt-row .iba-prompt,
+[data-exam="TOEFL"] .question-prompt-row .iba-prompt :where(p, h2, h3, li) {
   font-weight: 700;
 }
 .iba-prompt p + p,

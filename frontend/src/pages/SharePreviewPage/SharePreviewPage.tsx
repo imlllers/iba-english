@@ -1,4 +1,4 @@
-import { Alert, Box, Button } from "@mantine/core";
+import { Box, Button } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -124,9 +124,6 @@ export function SharePreviewPage() {
   }
   return (
     <MediaProvider value={mediaResolver}>
-      <Alert variant="light" color="blue" radius={0} ta="center" fw={600}>
-        ДЕМО-ПРОСМОТР
-      </Alert>
       <TestRunner
         test={test}
         answers={answers}

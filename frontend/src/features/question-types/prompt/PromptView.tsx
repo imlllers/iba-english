@@ -3,8 +3,9 @@ import { Fragment, type CSSProperties, type ReactNode } from "react";
 import type { Doc, DocMark, DocNode } from "@/entities/question/types";
 import { blankIds } from "../content";
 import { useMedia } from "../media/MediaContext";
+import { layoutGapAdjacentInlines, type GapAdjacentAffix } from "./gapAdjacentInlines";
 
-export type BlankRenderer = (id: string, index: number) => ReactNode;
+export type BlankRenderer = (id: string, index: number, affixes?: GapAdjacentAffix) => ReactNode;
 
 type PromptViewProps = {
   doc: Doc;
@@ -23,12 +24,58 @@ const ALIGN: Record<string, CSSProperties> = {
 export function PromptView({ doc, renderBlank, markers = false, startNumber = 1 }: PromptViewProps) {
   const media = useMedia();
   const order = blankIds(doc);
-  const fallback: BlankRenderer = (_, index) => (
-    <Badge component="span" variant={markers ? "light" : "outline"} color="iba" size="sm" radius="sm">
-      {markers ? String.fromCharCode(65 + index) : startNumber + index}
-    </Badge>
+  const fallback: BlankRenderer = (_, index, affixes) => (
+    <Box component="span" style={{ whiteSpace: "nowrap" }}>
+      {affixes?.before ? <span>{affixes.before}</span> : null}
+      <Badge component="span" variant={markers ? "light" : "outline"} color="iba" size="sm" radius="sm">
+        {markers ? String.fromCharCode(65 + index) : startNumber + index}
+      </Badge>
+      {affixes?.after ? <span>{affixes.after}</span> : null}
+    </Box>
   );
   const blank = renderBlank ?? fallback;
+
+  const renderInlineChildren = (children: DocNode[], keyPrefix: string | number): ReactNode[] => {
+    const { textAt, blankAffix } = layoutGapAdjacentInlines(children);
+    const nodes: ReactNode[] = [];
+    children.forEach((child, index) => {
+      if (child.type === "text") {
+        const text = textAt[index] ?? child.text ?? "";
+        if (!text) {
+          return;
+        }
+        nodes.push(wrapMarks(text, child.marks ?? [], `${keyPrefix}-t${index}`));
+        return;
+      }
+      if (child.type === "hardBreak") {
+        nodes.push(<br key={`${keyPrefix}-br${index}`} />);
+        return;
+      }
+      if (child.type === "blank") {
+        const id = String(child.attrs?.id ?? "");
+        const affix = blankAffix[index] ?? { before: "", after: "" };
+        nodes.push(
+          <Box
+            key={`${keyPrefix}-b${index}`}
+            component="span"
+            display="inline-flex"
+            style={{
+              alignItems: "baseline",
+              verticalAlign: "baseline",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {blank(id, order.indexOf(id), affix.before || affix.after ? affix : undefined)}
+          </Box>,
+        );
+        return;
+      }
+      if (child.type === "image") {
+        nodes.push(render(child, `${keyPrefix}-i${index}`));
+      }
+    });
+    return nodes;
+  };
 
   const render = (node: DocNode, key: number | string): ReactNode => {
     if (node.type === "text") {
@@ -44,7 +91,7 @@ export function PromptView({ doc, renderBlank, markers = false, startNumber = 1 
           key={key}
           component="span"
           display="inline-flex"
-          style={{ alignItems: "baseline", gap: "0.15em", verticalAlign: "baseline", margin: "4px 1px" }}
+          style={{ alignItems: "baseline", verticalAlign: "baseline", whiteSpace: "nowrap" }}
         >
           {blank(id, order.indexOf(id))}
         </Box>
@@ -55,30 +102,31 @@ export function PromptView({ doc, renderBlank, markers = false, startNumber = 1 
       const src = mediaId ? media.asset(mediaId) : "";
       return src ? <Image key={key} src={src} alt={String(node.attrs?.alt ?? "")} maw="100%" mah={250} fit="contain" radius="sm" my="xs" /> : null;
     }
-    const children = (node.content ?? []).map((child, index) => render(child, index));
+    const content = node.content ?? [];
     const align = ALIGN[String(node.attrs?.textAlign ?? "")] ?? undefined;
-    const body = isEmptyBlock(node) ? "\u00A0" : children;
+    const inlineBody = renderInlineChildren(content, key);
+    const body = isEmptyBlock(node) ? "\u00A0" : inlineBody;
     switch (node.type) {
       case "heading":
         return Number(node.attrs?.level) === 3
           ? <h3 key={key} style={align}>{body}</h3>
           : <h2 key={key} style={align}>{body}</h2>;
       case "bulletList":
-        return <ul key={key}>{children}</ul>;
+        return <ul key={key}>{content.map((child, index) => render(child, index))}</ul>;
       case "orderedList": {
         const listType = String(node.attrs?.type ?? "");
         return (
           <ol key={key} type={listType === "A" || listType === "a" || listType === "I" || listType === "i" ? listType : undefined}>
-            {children}
+            {content.map((child, index) => render(child, index))}
           </ol>
         );
       }
       case "listItem":
-        return <li key={key}>{isEmptyBlock(node) ? "\u00A0" : children}</li>;
+        return <li key={key}>{isEmptyBlock(node) ? "\u00A0" : body}</li>;
       case "blockquote":
         return (
           <blockquote key={key} className="iba-blockquote">
-            {children}
+            {body}
           </blockquote>
         );
       case "horizontalRule":
@@ -88,14 +136,27 @@ export function PromptView({ doc, renderBlank, markers = false, startNumber = 1 
       case "table":
         return (
           <Box key={key} className="iba-prompt-table-wrap">
-            <table className="iba-prompt-table"><tbody>{children}</tbody></table>
+            <table className="iba-prompt-table"><tbody>{content.map((child, index) => render(child, index))}</tbody></table>
           </Box>
         );
       case "tableRow":
-        return <tr key={key}>{children}</tr>;
+        return <tr key={key}>{content.map((child, index) => render(child, index))}</tr>;
       case "tableHeader":
-      case "tableCell":
-        return <td key={key} colSpan={span(node.attrs?.colspan)} rowSpan={span(node.attrs?.rowspan)} style={{ border: "1px solid var(--mantine-color-gray-3)", padding: "6px 8px", verticalAlign: "top" }}>{body}</td>;
+      case "tableCell": {
+        const cellBody = isEmptyBlock(node)
+          ? "\u00A0"
+          : content.map((child, index) => render(child, index));
+        return (
+          <td
+            key={key}
+            colSpan={span(node.attrs?.colspan)}
+            rowSpan={span(node.attrs?.rowspan)}
+            style={{ border: "1px solid var(--mantine-color-gray-3)", padding: "6px 8px", verticalAlign: "top" }}
+          >
+            {cellBody}
+          </td>
+        );
+      }
       default:
         return <p key={key} style={align}>{body}</p>;
     }

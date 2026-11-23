@@ -10,6 +10,7 @@ import type { PartInput } from "@/features/tests/testsApi";
 import { errorMessage } from "@/shared/api/client";
 import { Icon } from "@/shared/ui/Icon";
 import { Select } from "@/shared/ui/Select";
+import { SettingsHint } from "@/shared/ui/SettingsHint";
 import { MaterialLivePreview } from "./MaterialLivePreview";
 
 type PartFormProps = {
@@ -129,20 +130,26 @@ export function PartForm({
               persist({ items: next });
             }}
           />
-          <Select
-            label="Вопросы на странице"
-            value={oneQuestionPerPage === null ? "inherit" : oneQuestionPerPage ? "one" : "all"}
-            options={[
-              { value: "inherit", label: `Как в тесте (${defaultOneQuestionPerPage ? "по одному" : "все сразу"})` },
-              { value: "one", label: "По одному" },
-              { value: "all", label: "Все сразу" },
-            ]}
-            onChange={(value) => {
-              const next = value === "one" ? true : value === "all" ? false : null;
-              setOneQuestionPerPage(next);
-              persist({ oneQuestionPerPage: next });
-            }}
-          />
+          <Stack gap={4}>
+            <Select
+              label="Показ вопросов в этой части"
+              value={oneQuestionPerPage === null ? "inherit" : oneQuestionPerPage ? "one" : "all"}
+              options={[
+                {
+                  value: "inherit",
+                  label: `Как во всём тесте (${defaultOneQuestionPerPage ? "по одному" : "все на одном экране"})`,
+                },
+                { value: "one", label: "По одному на экране" },
+                { value: "all", label: "Все на одном экране" },
+              ]}
+              onChange={(value) => {
+                const next = value === "one" ? true : value === "all" ? false : null;
+                setOneQuestionPerPage(next);
+                persist({ oneQuestionPerPage: next });
+              }}
+            />
+            <SettingsHint>Можно задать отдельно для этой части</SettingsHint>
+          </Stack>
 
         </Stack>
       </Card>

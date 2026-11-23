@@ -74,7 +74,7 @@ export function ToeflRunner(props: TestRunnerProps) {
     partEnds = {}, questionEnds = {},
     onEnterSection, onEnterPart, onPausePart, onResumePart, onEnterQuestions,
     onSubmit, onExpire, onFocusLossExhausted, focusLossStorageKey, pageStorageKey,
-    submitting, submitError, attemptToken,     demoMode = false,
+    submitting, submitError, attemptToken, demoMode = false,
     initialAudioDone = [], onPersistAudioDone, flushAnswers,
     initialReadingStarted = {}, initialReadingDone = [],
     onPersistReadingStart, onPersistReadingDone,
@@ -1217,6 +1217,7 @@ export function ToeflRunner(props: TestRunnerProps) {
                   }
                 }}
                 listeningContentGate={listeningContentGate}
+                demoMode={demoMode}
               />
           );
           nodes.push(
