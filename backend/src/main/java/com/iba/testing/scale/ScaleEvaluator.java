@@ -45,6 +45,7 @@ public class ScaleEvaluator {
 
         ObjectNode result = mapper.createObjectNode();
         result.put("title", scale.path("title").asText(""));
+        putScaleMeta(result, scale);
         ArrayNode items = result.putArray("sections");
         JsonNode mapping = binding.path("sections");
         double sum = 0;
@@ -94,6 +95,8 @@ public class ScaleEvaluator {
                 JsonNode given = manual.path(String.valueOf(index));
                 if (given.isNumber()) {
                     score = given.asDouble();
+                } else if ("TOEIC".equals(examType)) {
+                    pending = true;
                 } else if (raw.pending) {
                     pending = true;
                 } else {
@@ -146,6 +149,17 @@ public class ScaleEvaluator {
         return result;
     }
 
+    private static void putScaleMeta(ObjectNode result, JsonNode scale) {
+        boolean average = "average".equals(scale.path("aggregate").asText("sum"));
+        double totalMax = 0;
+        for (JsonNode section : scale.path("sections")) {
+            double max = section.path("max").asDouble(0);
+            totalMax = average ? Math.max(totalMax, max) : totalMax + max;
+        }
+        result.put("totalMax", totalMax);
+        result.put("hasLevels", scale.path("levels").isArray() && !scale.path("levels").isEmpty());
+    }
+
     private static Double fromTasks(JsonNode section, List<double[]> tasks, boolean ieltsWriting) {
         double weighted = 0;
         double weights = 0;
@@ -190,7 +204,7 @@ public class ScaleEvaluator {
         return roundTo(min + ratio * (max - min), section.path("step").asDouble(0), "nearest");
     }
 
-    static double roundTo(double value, double step, String mode) {
+    public static double roundTo(double value, double step, String mode) {
         if (step <= 0) {
             return value;
         }

@@ -63,15 +63,50 @@ class PresetCatalogTest {
     @Test
     void toeflLegacyPresetIsGone() {
         assertNull(catalog.find("TOEFL_LEGACY"));
-        assertEquals(3, catalog.all().size());
+        assertEquals(4, catalog.all().size());
     }
 
     @Test
-    void toeicPreset() {
+    void toeicListeningReadingPreset() {
         PresetCatalog.ExamPreset preset = catalog.find("TOEIC");
         assertNotNull(preset);
+        assertEquals("TOEIC Listening & Reading", preset.title());
+        assertEquals("TOEIC", preset.family());
+        assertEquals(2, preset.sections().size());
+        assertEquals("LISTENING", preset.sections().get(0).sectionType());
+        assertEquals("READING", preset.sections().get(1).sectionType());
+        assertEquals(45, preset.sections().get(0).timeLimitMinutes());
+        assertEquals(75, preset.sections().get(1).timeLimitMinutes());
+        assertFalse(preset.sections().get(0).allowBackToQuestions());
+        assertFalse(preset.sections().get(0).allowBackToPart());
+        assertTrue(preset.sections().get(1).allowBackToQuestions());
+        assertTrue(preset.sections().get(1).allowBackToPart());
+        assertEquals(4, preset.sections().get(0).parts().size());
+        assertTrue(preset.sections().get(0).parts().get(0).oneQuestionPerPage());
+        assertTrue(preset.sections().get(0).parts().get(1).oneQuestionPerPage());
+        assertFalse(preset.sections().get(0).parts().get(2).oneQuestionPerPage());
+        assertFalse(preset.sections().get(0).parts().get(3).oneQuestionPerPage());
+        assertEquals("score_and_scale", preset.defaultSettings().get("resultDetail"));
         assertFalse(preset.defaultSettings().containsKey("autoAdvanceOnPartTimeout"));
         assertFalse(preset.defaultSettings().containsKey("pausePartTimerDuringAudio"));
-        assertEquals(45, preset.sections().get(0).timeLimitMinutes());
+    }
+
+    @Test
+    void toeicSpeakingWritingPreset() {
+        PresetCatalog.ExamPreset preset = catalog.find("TOEIC_SW");
+        assertNotNull(preset);
+        assertEquals("TOEIC Speaking & Writing", preset.title());
+        assertEquals("TOEIC", preset.family());
+        assertEquals(2, preset.sections().size());
+        assertEquals("SPEAKING", preset.sections().get(0).sectionType());
+        assertEquals("WRITING", preset.sections().get(1).sectionType());
+        assertEquals(20, preset.sections().get(0).timeLimitMinutes());
+        assertEquals(60, preset.sections().get(1).timeLimitMinutes());
+        assertTrue(preset.sections().get(0).parts().isEmpty());
+        assertTrue(preset.sections().get(1).parts().isEmpty());
+        assertFalse(preset.sections().get(0).allowBackToQuestions());
+        assertFalse(preset.sections().get(1).allowBackToQuestions());
+        assertEquals("score_and_scale", preset.defaultSettings().get("resultDetail"));
+        assertEquals("TOEIC", preset.defaultSettings().get("examType"));
     }
 }

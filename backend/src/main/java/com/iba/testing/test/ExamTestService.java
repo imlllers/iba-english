@@ -273,8 +273,13 @@ public class ExamTestService {
             return;
         }
         String examType = test.getSettings().path("examType").asText("CUSTOM");
-        String scaleId = examType.toLowerCase(Locale.ROOT);
+        String scaleId = test.getExamPreset() != null && !test.getExamPreset().isBlank()
+                ? test.getExamPreset().toLowerCase(Locale.ROOT)
+                : examType.toLowerCase(Locale.ROOT);
         JsonNode scale = scoreScales.ownerCopy(ownerId, scaleId);
+        if (scale == null && !scaleId.equals(examType.toLowerCase(Locale.ROOT))) {
+            scale = scoreScales.ownerCopy(ownerId, examType.toLowerCase(Locale.ROOT));
+        }
         if (scale == null || !test.getSettings().isObject()) {
             return;
         }

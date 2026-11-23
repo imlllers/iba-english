@@ -26,4 +26,14 @@ describe("preferredScoreScale", () => {
   it("picks IELTS by exam type", () => {
     expect(preferredScoreScale(scales, "IELTS")?.id).toBe("ielts");
   });
+
+  const toeicScales = [scale("toeic", "TOEIC"), scale("toeic_sw", "TOEIC")];
+
+  it("picks Listening & Reading scale by TOEIC preset key", () => {
+    expect(preferredScoreScale(toeicScales, "TOEIC", "TOEIC")?.id).toBe("toeic");
+  });
+
+  it("picks Speaking & Writing scale by TOEIC_SW preset key", () => {
+    expect(preferredScoreScale(toeicScales, "TOEIC", "TOEIC_SW")?.id).toBe("toeic_sw");
+  });
 });

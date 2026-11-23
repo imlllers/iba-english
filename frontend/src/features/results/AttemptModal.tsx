@@ -18,10 +18,11 @@ import { StatusBadge } from "@/shared/ui/StatusBadge";
 import { AnswerReview, SectionSheet, isReviewCard, sectionGroups, type NumberedAnswer } from "./AnswerReview";
 import { recordingUrl, resultsApi } from "./resultsApi";
 
-function SummaryTable({ attempt, sections, onManual }: {
+function SummaryTable({ attempt, sections, onManual, examType }: {
   attempt: AttemptDetail;
   sections: { title: string; items: NumberedAnswer[] }[];
   onManual: (index: number, score: number | null) => void;
+  examType: ExamDisplayType;
 }) {
   const scale = attempt.scaleResult;
   return (
@@ -40,7 +41,7 @@ function SummaryTable({ attempt, sections, onManual }: {
               <Table.Td>{section.name}</Table.Td>
               <Table.Td ta="center">{section.raw === null || !section.rawMax ? "–" : formatScore(section.raw, section.rawMax)}</Table.Td>
               <Table.Td ta="center">
-                {section.method === "manual" && !section.pending ? (
+                {section.method === "manual" && (!section.pending || examType === "TOEIC") ? (
                   <Group justify="center"><ManualScore section={section} compact onSave={(score) => onManual(section.index, score)} /></Group>
                 ) : section.score !== null ? (
                   formatNumber(section.score)
@@ -131,6 +132,7 @@ function AttemptBody({ attempt, onSaved }: { attempt: AttemptDetail; onSaved: (n
       <SummaryTable
         attempt={attempt}
         sections={sections}
+        examType={examType}
         onManual={(index, score) => scaleScore.mutate({ index, score })}
       />
       {scaleScore.isError && (

@@ -28,13 +28,21 @@
 
 ## TOEIC
 
-Секции: Listening → Reading → Speaking → Writing.
+Два отдельных шаблона, как на сайте института: Listening & Reading и Speaking & Writing. Общее: нумерация по всему тесту; назад по секциям – нет; аудио с автостартом; состав результата – итоговый балл и баллы по секциям; контроль выхода из окна теста – 2 предупреждения; досрочная сдача разрешена.
 
-- Listening Part 1-4, Reading Part 5-7; Speaking и Writing без частей (преподаватель добавляет Speaking ×11 и Written ×8).
-- Нумерация по всему тесту.
-- Назад: Reading – да; Listening / Speaking / Writing – нет; по секциям – нет.
-- Время: Listening 45, Reading 75, Speaking 20, Writing 60 мин.
-- Аудио с автостартом; состав результата – итоговый балл; контроль выхода из окна теста – 2 предупреждения.
+### TOEIC Listening & Reading
+
+Секции: Listening → Reading. Шкала `toeic`: Listening и Reading 5–495, итог – сумма 10–990, уровень CEFR по сумме.
+
+- Listening, 45 мин, назад – нет: Part 1: Photographs и Part 2: Question-Response – одно задание на странице; Part 3: Conversations и Part 4: Talks – вся часть на странице.
+- Reading, 75 мин, назад внутри секции – да: Part 5: Incomplete Sentences – одно задание на странице; Part 6: Text Completion и Part 7: Reading Comprehension – вся часть на странице.
+
+### TOEIC Speaking & Writing
+
+Секции: Speaking → Writing, без частей, одно задание на странице. Шкала `toeic_sw`: Speaking и Writing 0–200 с шагом 10, баллы ставит преподаватель, итог – сумма 0–400, без уровней CEFR.
+
+- Speaking, 20 мин, назад – нет.
+- Writing, 60 мин, назад – нет.
 
 ## Источники (ориентиры)
 

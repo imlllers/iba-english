@@ -93,6 +93,9 @@ export function normalizeExamDisplayType(raw: unknown, examPreset?: string | nul
     if (examPreset === "IELTS" || examPreset === "TOEFL" || examPreset === "TOEIC") {
       return examPreset;
     }
+    if (typeof examPreset === "string" && examPreset.startsWith("TOEIC")) {
+      return "TOEIC";
+    }
   }
   return "CUSTOM";
 }

@@ -38,6 +38,8 @@ export type ScaleResult = {
   title: string;
   complete: boolean;
   total: number | null;
+  totalMax?: number | null;
+  hasLevels?: boolean;
   level: string | null;
   sections: ScaleResultSection[];
 };

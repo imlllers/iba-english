@@ -1,6 +1,8 @@
 import { Badge, Group, Stack, Text, Title } from "@mantine/core";
 import type { ParticipantResult } from "@/entities/attempt/types";
+import type { ScaleSection } from "@/entities/scale/types";
 import type { ExamDisplayType, ResultDetail, TestSettings } from "@/entities/test/types";
+import { isManual } from "@/features/score-scales/scoreScale";
 import { resultDisplayEnabled } from "@/entities/test/settings";
 import { normalizeResultDetail, resultShowsOverall, resultShowsScaleSections } from "@/entities/test/resultDisplay";
 import { ScaleResultView } from "@/features/score-scales/ScaleResultView";
@@ -35,7 +37,11 @@ function ParticipantScaleOverall({
     );
   }
   return (
-    <SettingsHint ta="center">The total and level will appear when all sections are scored</SettingsHint>
+    <SettingsHint ta="center">
+      {result.hasLevels
+        ? "The total and level will appear when all sections are scored"
+        : "The total will appear when all sections are scored"}
+    </SettingsHint>
   );
 }
 
@@ -103,6 +109,25 @@ export function ParticipantResultBody({
   );
 }
 
+function previewSampleScore(section: ScaleSection): { score: number | null; pending: boolean } {
+  if (isManual(section)) {
+    return { score: null, pending: true };
+  }
+  const step = section.step > 0 ? section.step : 1;
+  const span = section.max - section.min;
+  const value = span > 0
+    ? section.min + Math.round((span * 0.6) / step) * step
+    : section.min;
+  return { score: value, pending: false };
+}
+
+function previewTotalMax(scaleSections: ScaleSection[], aggregate: string): number {
+  if (aggregate === "average") {
+    return scaleSections.reduce((acc, section) => Math.max(acc, section.max), 0);
+  }
+  return scaleSections.reduce((acc, section) => acc + section.max, 0);
+}
+
 export function mockPreviewScale(settings: TestSettings): ParticipantResult["scale"] | undefined {
   const binding = settings.scoreScale;
   if (!binding?.scale) {
@@ -112,6 +137,7 @@ export function mockPreviewScale(settings: TestSettings): ParticipantResult["sca
   const ielts = settings.examType === "IELTS";
   const sections = scale.sections.map((section, index) => {
     const speaking = ielts && section.sectionType === "SPEAKING";
+    const sample = speaking ? { score: null, pending: true } : previewSampleScore(section);
     return {
       index,
       name: section.name,
@@ -122,16 +148,30 @@ export function mockPreviewScale(settings: TestSettings): ParticipantResult["sca
       testSectionTitle: section.name,
       raw: null,
       rawMax: null,
-      score: speaking ? null : 6.5,
-      pending: speaking,
+      score: sample.score,
+      pending: sample.pending,
     };
   });
-  const speakingOpen = sections.some((section) => section.pending && section.score === null);
+  const open = sections.some((section) => section.score === null);
+  const scored = sections.filter((section) => section.score !== null);
+  const total = open
+    ? null
+    : scale.aggregate === "average"
+      ? scored.reduce((sum, section) => sum + (section.score ?? 0), 0) / scored.length
+      : scored.reduce((sum, section) => sum + (section.score ?? 0), 0);
+  const hasLevels = scale.levels.length > 0;
+  const level = open || !hasLevels ? null : scale.levels.find((item) => {
+    if (total == null) return false;
+    const top = item.max ?? item.min;
+    return total >= item.min && total <= top;
+  })?.label ?? "B2";
   return {
     title: scale.title,
     sections,
-    total: speakingOpen && ielts ? null : 7,
-    level: speakingOpen && ielts ? null : "B2",
-    complete: !(speakingOpen && ielts),
+    total,
+    totalMax: previewTotalMax(scale.sections, scale.aggregate),
+    hasLevels,
+    level,
+    complete: !open,
   };
 }

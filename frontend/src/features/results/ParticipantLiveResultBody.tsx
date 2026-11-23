@@ -23,13 +23,10 @@ function liveOverallNumbers(
   maxScore: number | null | undefined,
 ): { value: number; max: number | null; level: string | null; scaleTitle?: string } | null {
   if (scale?.total != null) {
-    const sections = scale.sections;
-    const uniformMax = sections.length && sections.every((s) => s.max === sections[0].max)
-      ? sections[0].max
-      : sections[0]?.max ?? null;
+    const gaugeMax = scale.totalMax ?? scale.sections[0]?.max ?? null;
     return {
       value: scale.total,
-      max: uniformMax,
+      max: gaugeMax,
       level: scale.level,
       scaleTitle: scale.title,
     };
@@ -100,6 +97,7 @@ export function ParticipantLiveResultBody({
       {showScaleBreakdown && scale ? (
         <ParticipantScoreDisplay
           scale={scale}
+          examType={examType}
           rawScore={score}
           rawMaxScore={maxScore}
           hideOverall={ieltsSpeakingSeparate || detail === "sections_only"}

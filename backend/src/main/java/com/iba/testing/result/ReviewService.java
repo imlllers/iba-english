@@ -118,7 +118,9 @@ public class ReviewService {
         if (attempt.getStatus() == AttemptStatus.IN_PROGRESS) {
             throw new ApiException(HttpStatus.CONFLICT, "NOT_SUBMITTED", "Попытка ещё не отправлена");
         }
-        JsonNode section = attempt.getTestVersion().getSettingsSnapshot().path("scoreScale").path("scale").path("sections").path(index);
+        JsonNode binding = attempt.getTestVersion().getSettingsSnapshot().path("scoreScale");
+        JsonNode scale = binding.path("scale");
+        JsonNode section = scale.path("sections").path(index);
         if (section.isMissingNode() || !"manual".equals(section.path("convert").path("method").asText(""))) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION", "У этой секции балл считается автоматически");
         }
@@ -129,6 +131,12 @@ public class ReviewService {
             double value = score.doubleValue();
             if (value < section.path("min").asDouble() - 1e-9 || value > section.path("max").asDouble() + 1e-9) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION", "Балл вне диапазона шкалы");
+            }
+            if ("toeic_sw".equals(scale.path("id").asText(""))) {
+                double step = section.path("step").asDouble(10);
+                if (step > 0 && Math.abs(ScaleEvaluator.roundTo(value, step, "nearest") - value) > 1e-9) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION", "Балл должен быть кратен шагу шкалы");
+                }
             }
             manual.put(String.valueOf(index), score);
         }
