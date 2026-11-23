@@ -24,6 +24,7 @@ export type PlayerProps = {
   hideWordCount?: boolean;
   showWordCountToggle?: boolean;
   onToggleWordCount?: () => void;
+  demoMode?: boolean;
 };
 
 export type EngineUi = {

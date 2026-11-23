@@ -18,7 +18,7 @@ export function AcceptedAnswersField({ label, rule, onChange, onKeyDown }: Accep
       label={label}
       withAsterisk
       value={text}
-      placeholder="Введите варианты, каждый с новой строки"
+      placeholder="Каждый вариант с новой строки"
       onChange={(event) => {
         setText(event.currentTarget.value);
         onChange(linesRule(event.currentTarget.value, rule));

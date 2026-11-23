@@ -4,6 +4,7 @@ import type { Doc, DocNode, InlineOptions } from "@/entities/question/types";
 import { Select } from "@/shared/ui/Select";
 import { blankKinds, blankIds } from "../../content";
 import { formatQuestionNumber } from "../../numbering";
+import type { GapAdjacentAffix } from "../../prompt/gapAdjacentInlines";
 import { PromptView } from "../../prompt/PromptView";
 import { gapInputStyles, gapNumberStyle, gapSelectStyles } from "../gapStyles";
 import type { PlayerProps } from "../types";
@@ -203,16 +204,21 @@ export function InlinePlayer({
     setCaret(id, best);
   };
 
-  const renderBlank = (id: string, index: number) => {
+  const blankWrapStyle = { display: "inline-flex", alignItems: "baseline", gap: "0.25rem", whiteSpace: "nowrap" } as const;
+
+  const renderBlank = (id: string, index: number, affixes?: GapAdjacentAffix) => {
     const number = startNumber + (sentenceMode ? Math.max(0, order.indexOf(id)) : index);
     const kind = kinds.get(id) ?? "gap";
     const showNumber = !sentenceMode && !hideBlankNumbers;
     const label = formatQuestionNumber(number, numberFormat);
+    const before = affixes?.before ?? "";
+    const after = affixes?.after ?? "";
 
     if (kind === "dropdown") {
       return (
-        <span data-gap-blank={id} style={{ display: "inline-flex", alignItems: "baseline", gap: "0.25rem" }}>
+        <span data-gap-blank={id} style={blankWrapStyle}>
           {showNumber ? <span style={gapNumberStyle} aria-hidden>{label}</span> : null}
+          {before ? <span>{before}</span> : null}
           <Select
             size="sm"
             styles={gapSelectStyles}
@@ -225,6 +231,7 @@ export function InlinePlayer({
               ...(options.choices?.[id] ?? []).map((choice) => ({ value: choice.id, label: choice.text })),
             ]}
           />
+          {after ? <span>{after}</span> : null}
         </span>
       );
     }
@@ -234,8 +241,9 @@ export function InlinePlayer({
       const cells = cellsOf(id, letters);
       const activeCell = focusedBlank === id && !readOnly ? caretOf(id, letters) : -1;
       return (
-        <span data-gap-blank={id} style={{ display: "inline-flex", alignItems: "baseline", gap: "0.25rem" }}>
+        <span data-gap-blank={id} style={blankWrapStyle}>
           {showNumber ? <span style={gapNumberStyle} aria-hidden>{label}</span> : null}
+          {before ? <span>{before}</span> : null}
           <span style={{ whiteSpace: "nowrap" }}>
             <span>{options.prefixes?.[id] ?? ""}</span>
             <span className="gap-letters">
@@ -275,13 +283,15 @@ export function InlinePlayer({
               />
             </span>
           </span>
+          {after ? <span>{after}</span> : null}
         </span>
       );
     }
 
     return (
-      <span data-gap-blank={id} style={{ display: "inline-flex", alignItems: "baseline", gap: "0.25rem" }}>
+      <span data-gap-blank={id} style={blankWrapStyle}>
         {showNumber ? <span style={gapNumberStyle} aria-hidden>{label}</span> : null}
+        {before ? <span>{before}</span> : null}
         {kind === "tail" ? <span>{options.prefixes?.[id] ?? ""}</span> : null}
         <TextInput
           aria-label={`Question ${number}`}
@@ -293,6 +303,7 @@ export function InlinePlayer({
           onChange={(event) => set(id, event.target.value)}
           onKeyDown={(event) => onBlankKeyDown(id, event)}
         />
+        {after ? <span>{after}</span> : null}
       </span>
     );
   };

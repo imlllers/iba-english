@@ -62,8 +62,8 @@ export function resultReviewEnabled(examType?: ExamDisplayType | null): boolean 
   return RESULT_REVIEW_ENABLED || isOfficialExamType(examType);
 }
 
-export function errorExplanationsEnabled(examType?: ExamDisplayType | null): boolean {
-  return ERROR_EXPLANATIONS_ENABLED || isOfficialExamType(examType);
+export function errorExplanationsEnabled(_examType?: ExamDisplayType | null): boolean {
+  return ERROR_EXPLANATIONS_ENABLED;
 }
 
 export function accessDatesEnabled(examType?: ExamDisplayType | null): boolean {

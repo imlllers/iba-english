@@ -26,6 +26,7 @@ export function SpeakingPlayer({
   onAnswer,
   readOnly,
   examType,
+  demoMode = false,
   autoFlow = false,
   promptAudioReady = true,
   promptAudioInFeed = false,
@@ -146,7 +147,7 @@ export function SpeakingPlayer({
         readOnly={readOnly}
         autoFlow={autoFlow}
         autoStart={autoFlow && promptDone && promptAudioReady}
-        showRecordCue={Boolean(promptVideo)}
+        showRecordCue={Boolean(promptVideo) && !demoMode}
         onChange={(value) => onAnswer(value)}
         onComplete={onComplete}
       />

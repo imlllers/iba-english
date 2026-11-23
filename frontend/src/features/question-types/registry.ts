@@ -70,7 +70,7 @@ export const GROUPS: { id: TypeGroup; label: string }[] = [
 
 export const QUESTION_TYPES = Object.keys(TYPE_META) as QuestionType[];
 
-export const DISABLED_QUESTION_TYPES: ReadonlySet<QuestionType> = new Set<QuestionType>(["SPEAKING_RECORDING"]);
+export const DISABLED_QUESTION_TYPES: ReadonlySet<QuestionType> = new Set<QuestionType>();
 
 export const ANSWER_CATALOG: QuestionType[] = [
   "SINGLE_CHOICE",

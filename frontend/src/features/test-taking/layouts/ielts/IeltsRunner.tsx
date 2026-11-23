@@ -780,6 +780,7 @@ export function IeltsRunner(props: TestRunnerProps) {
                 examAudio={questionExamAudio(question.id)}
                 hideQuestionsHeading={Boolean(groupHeading && ownHeading === groupHeading)}
                 autoPlayTaskVideo={shouldAutoPlayQuestionTaskVideo(false, question, false, videoAutoStart)}
+                demoMode={demoMode}
               />
               {explanations[question.id] ? (
                 <Alert color="orange" variant="light" p="sm">

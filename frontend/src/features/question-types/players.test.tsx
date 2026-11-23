@@ -112,6 +112,35 @@ describe("question players", () => {
     expect(isAnswered(question("ORDER_SENTENCES", options), { order: ["a", null] })).toBe(true);
   });
 
+  it("shows the blank number before a flush prefix symbol", () => {
+    const gapped = question("GAPPED_TEXT", {});
+    gapped.promptContent = {
+      type: "doc",
+      content: [{
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Amount " },
+          { type: "text", text: "$" },
+          { type: "blank", attrs: { id: "b1" } },
+        ],
+      }],
+    };
+    const { container } = renderPlayer(
+      <QuestionPlayer
+        question={gapped}
+        kicker="9"
+        startNumber={9}
+        examType="CUSTOM"
+        answer={{}}
+        onAnswer={() => undefined}
+      />,
+    );
+    const blank = container.querySelector('[data-gap-blank="b1"]');
+    const text = blank?.textContent ?? "";
+    expect(text.indexOf("9")).toBeLessThan(text.indexOf("$"));
+    expect(container.textContent).toContain("Amount ");
+  });
+
   it("TOEFL gapped text does not show a Questions range", () => {
     const gapped = question("GAPPED_TEXT", {});
     gapped.promptContent = {

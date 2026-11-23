@@ -39,6 +39,7 @@ type QuestionPlayerProps = {
   autoPlayTaskVideo?: boolean;
   listeningContentGate?: boolean;
   teacherReview?: boolean;
+  demoMode?: boolean;
 };
 
 export function QuestionPlayer({
@@ -68,6 +69,7 @@ export function QuestionPlayer({
   autoPlayTaskVideo = false,
   listeningContentGate = false,
   teacherReview = false,
+  demoMode = false,
 }: QuestionPlayerProps) {
   const ui = ENGINES[engineOf(question.type)];
   const Player = ui.Player;
@@ -169,6 +171,7 @@ export function QuestionPlayer({
       hideWordCount={hideWordCount}
       showWordCountToggle={showWordCountToggle}
       onToggleWordCount={onToggleWordCount}
+      demoMode={demoMode}
       {...(engineOf(question.type) === "SPEAKING" ? {
         autoFlow: speakingAutoFlow,
         promptAudioReady: speakingPromptReady,
