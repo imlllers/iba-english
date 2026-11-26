@@ -7,7 +7,7 @@ export function speakingRecordLimitSeconds(
   if (maxSeconds != null && maxSeconds > 0) {
     return maxSeconds;
   }
-  if (examType === "TOEFL") {
+  if (examType === "TOEFL" || examType === "TOEIC") {
     return undefined;
   }
   return 120;

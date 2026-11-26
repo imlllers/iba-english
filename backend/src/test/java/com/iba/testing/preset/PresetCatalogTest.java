@@ -39,6 +39,7 @@ class PresetCatalogTest {
         assertNotNull(preset);
         assertEquals("TOEFL iBT (2026)", preset.title());
         assertEquals("part", preset.defaultSettings().get("questionNumberScope"));
+        assertEquals("1.", preset.defaultSettings().get("questionNumberFormat"));
         assertFalse(preset.defaultSettings().containsKey("listeningAnswerSeconds"));
         assertEquals(true, preset.defaultSettings().get("autoAdvanceOnPartTimeout"));
         assertEquals(false, preset.defaultSettings().get("pausePartTimerDuringAudio"));
@@ -63,15 +64,55 @@ class PresetCatalogTest {
     @Test
     void toeflLegacyPresetIsGone() {
         assertNull(catalog.find("TOEFL_LEGACY"));
-        assertEquals(3, catalog.all().size());
+        assertEquals(4, catalog.all().size());
     }
 
     @Test
-    void toeicPreset() {
+    void toeicListeningReadingPreset() {
         PresetCatalog.ExamPreset preset = catalog.find("TOEIC");
         assertNotNull(preset);
+        assertEquals("TOEIC Listening & Reading", preset.title());
+        assertEquals("TOEIC", preset.family());
+        assertEquals(2, preset.sections().size());
+        assertEquals("LISTENING", preset.sections().get(0).sectionType());
+        assertEquals("READING", preset.sections().get(1).sectionType());
+        assertNull(preset.sections().get(0).timeLimitMinutes());
+        assertEquals(75, preset.sections().get(1).timeLimitMinutes());
+        assertEquals(true, preset.defaultSettings().get("autoAdvanceOnQuestionTimeout"));
+        assertFalse(preset.sections().get(0).allowBackToQuestions());
+        assertFalse(preset.sections().get(0).allowBackToPart());
+        assertTrue(preset.sections().get(1).allowBackToQuestions());
+        assertTrue(preset.sections().get(1).allowBackToPart());
+        assertEquals(4, preset.sections().get(0).parts().size());
+        assertTrue(preset.sections().get(0).parts().get(0).oneQuestionPerPage());
+        assertTrue(preset.sections().get(0).parts().get(1).oneQuestionPerPage());
+        assertFalse(preset.sections().get(0).parts().get(2).oneQuestionPerPage());
+        assertFalse(preset.sections().get(0).parts().get(3).oneQuestionPerPage());
+        assertEquals("score_and_scale", preset.defaultSettings().get("resultDetail"));
         assertFalse(preset.defaultSettings().containsKey("autoAdvanceOnPartTimeout"));
         assertFalse(preset.defaultSettings().containsKey("pausePartTimerDuringAudio"));
-        assertEquals(45, preset.sections().get(0).timeLimitMinutes());
+    }
+
+    @Test
+    void toeicSpeakingWritingPreset() {
+        PresetCatalog.ExamPreset preset = catalog.find("TOEIC_SW");
+        assertNotNull(preset);
+        assertEquals("TOEIC Speaking & Writing", preset.title());
+        assertEquals("TOEIC", preset.family());
+        assertEquals(2, preset.sections().size());
+        assertEquals("SPEAKING", preset.sections().get(0).sectionType());
+        assertEquals("WRITING", preset.sections().get(1).sectionType());
+        assertEquals(20, preset.sections().get(0).timeLimitMinutes());
+        assertEquals(60, preset.sections().get(1).timeLimitMinutes());
+        assertEquals(5, preset.sections().get(0).parts().size());
+        assertEquals(3, preset.sections().get(1).parts().size());
+        assertEquals("Questions 1-2: Read a Text Aloud", preset.sections().get(0).parts().get(0).title());
+        assertTrue(preset.sections().get(0).parts().get(0).oneQuestionPerPage());
+        assertEquals("Questions 1-5: Write a Sentence Based on a Picture", preset.sections().get(1).parts().get(0).title());
+        assertFalse(preset.sections().get(0).allowBackToQuestions());
+        assertFalse(preset.sections().get(1).allowBackToQuestions());
+        assertEquals("section", preset.defaultSettings().get("questionNumberScope"));
+        assertEquals("score_and_scale", preset.defaultSettings().get("resultDetail"));
+        assertEquals("TOEIC", preset.defaultSettings().get("examType"));
     }
 }

@@ -121,8 +121,19 @@ export function PromptView({ doc, renderBlank, markers = false, startNumber = 1 
           </ol>
         );
       }
-      case "listItem":
+      case "listItem": {
+        const blockChildren = content.some(
+          (child) => child.type !== "text" && child.type !== "hardBreak" && child.type !== "blank" && child.type !== "image",
+        );
+        if (blockChildren) {
+          return (
+            <li key={key}>
+              {content.map((child, index) => render(child, `${key}-${index}`))}
+            </li>
+          );
+        }
         return <li key={key}>{isEmptyBlock(node) ? "\u00A0" : body}</li>;
+      }
       case "blockquote":
         return (
           <blockquote key={key} className="iba-blockquote">

@@ -84,6 +84,10 @@ function pushQuestions(
   groupKey?: string,
 ) {
   if (!perPage) {
+    if (examType === "TOEIC") {
+      pushQuestions(pages, cursor, section, sectionIndex, part, questions, true, examType, groupKey);
+      return;
+    }
     pushPage(pages, cursor, {
       key: groupKey ?? (part ? `part-${part.id}` : `section-${section.id}`),
       section,

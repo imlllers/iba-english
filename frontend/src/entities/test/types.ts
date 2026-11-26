@@ -53,11 +53,21 @@ export type TestScoreScale = {
   sections: ScaleSectionBinding[];
 };
 
+export type PartExampleChoiceOption = { id: string; text: string };
+
+export type PartExampleBlock =
+  | { id: string; kind: "text"; doc?: Doc }
+  | { id: string; kind: "image" | "audio"; mediaId?: string }
+  | { id: string; kind: "choices"; options: PartExampleChoiceOption[]; correctId: string };
+
+export type PartExample = { blocks: PartExampleBlock[] };
+
 export type SectionPart = {
   id: string;
   title: string;
   instructions: string;
   items?: ContentItem[];
+  example?: PartExample | null;
   timeLimitMinutes?: number | null;
   timeLimitSeconds?: number | null;
   oneQuestionPerPage?: boolean | null;
@@ -159,6 +169,7 @@ export type PublicTestSettings = Partial<TestSettings>;
 export type PublicTest = {
   title: string;
   description: string;
+  examPreset?: string | null;
   settings: PublicTestSettings;
   sections: PublicSection[];
 };

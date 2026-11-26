@@ -273,8 +273,13 @@ public class ExamTestService {
             return;
         }
         String examType = test.getSettings().path("examType").asText("CUSTOM");
-        String scaleId = examType.toLowerCase(Locale.ROOT);
+        String scaleId = test.getExamPreset() != null && !test.getExamPreset().isBlank()
+                ? test.getExamPreset().toLowerCase(Locale.ROOT)
+                : examType.toLowerCase(Locale.ROOT);
         JsonNode scale = scoreScales.ownerCopy(ownerId, scaleId);
+        if (scale == null && !scaleId.equals(examType.toLowerCase(Locale.ROOT))) {
+            scale = scoreScales.ownerCopy(ownerId, examType.toLowerCase(Locale.ROOT));
+        }
         if (scale == null || !test.getSettings().isObject()) {
             return;
         }
@@ -421,6 +426,10 @@ public class ExamTestService {
                     if (advancePart != null && !advancePart.isNull()) {
                         part.setAutoAdvanceOnTimeout(advancePart.asBoolean());
                     }
+                    JsonNode example = partPreset.get("example");
+                    if (example != null && !example.isNull()) {
+                        part.setExample(example.deepCopy());
+                    }
                     parts.save(part);
                 }
             }
@@ -436,7 +445,7 @@ public class ExamTestService {
     @Transactional(readOnly = true)
     public ObjectNode preview(UUID ownerId, UUID testId) {
         ExamTest test = access.requireOwned(testId, ownerId);
-        return views.publicView(views.snapshot(test), test.getSettings());
+        return views.publicView(views.snapshot(test), test.getSettings(), test.getExamPreset());
     }
 
     @Transactional
@@ -607,22 +616,6 @@ public class ExamTestService {
                 ? source.path("videoAutoStart").asBoolean(false)
                 : source.path("audioAutoStart").asBoolean(false);
         settings.put("videoAutoStart", videoAutoStart);
-        String numberFormat = source.path("questionNumberFormat").asText("1");
-        if (!numberFormat.equals("1")
-                && !numberFormat.equals("1.")
-                && !numberFormat.equals("1)")
-                && !numberFormat.equals("(1)")
-                && !numberFormat.equals("Q1")
-                && !numberFormat.equals("Question 1")) {
-            numberFormat = "1";
-        }
-        settings.put("questionNumberFormat", numberFormat);
-        String numberScope = source.path("questionNumberScope").asText("test");
-        if (!numberScope.equals("test")
-                && !numberScope.equals("section")
-                && !numberScope.equals("part")) {
-            numberScope = "test";
-        }
         String examType = source.path("examType").asText("CUSTOM");
         if (!examType.equals("CUSTOM")
                 && !examType.equals("IELTS")
@@ -631,6 +624,28 @@ public class ExamTestService {
             examType = "CUSTOM";
         }
         settings.put("examType", examType);
+        String numberFormat;
+        JsonNode rawNumberFormat = source.path("questionNumberFormat");
+        if (rawNumberFormat.isMissingNode() || rawNumberFormat.isNull() || rawNumberFormat.asText("").isBlank()) {
+            numberFormat = examType.equals("TOEFL") ? "1." : "1";
+        } else {
+            numberFormat = rawNumberFormat.asText("1");
+            if (!numberFormat.equals("1")
+                    && !numberFormat.equals("1.")
+                    && !numberFormat.equals("1)")
+                    && !numberFormat.equals("(1)")
+                    && !numberFormat.equals("Q1")
+                    && !numberFormat.equals("Question 1")) {
+                numberFormat = "1";
+            }
+        }
+        settings.put("questionNumberFormat", numberFormat);
+        String numberScope = source.path("questionNumberScope").asText("test");
+        if (!numberScope.equals("test")
+                && !numberScope.equals("section")
+                && !numberScope.equals("part")) {
+            numberScope = "test";
+        }
         if (examType.equals("TOEFL")) {
             numberScope = "part";
         }

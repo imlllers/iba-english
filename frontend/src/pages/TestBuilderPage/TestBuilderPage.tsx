@@ -658,6 +658,8 @@ function TestBuilderPageInner() {
           startNumber={entry?.start ?? 1}
           numberFormat={test.settings.questionNumberFormat}
           examType={examType}
+          sectionType={owner.sectionType}
+          speakingAutoFlow={owner.speakingAutoFlow}
         />
       </Stack>
     );
@@ -831,6 +833,7 @@ function TestBuilderPageInner() {
                       part={part}
                       alone={sectionParts(section).length === 1}
                       examType={test.settings.examType ?? "CUSTOM"}
+                      sectionType={section.sectionType}
                       defaultOneQuestionPerPage={test.settings.oneQuestionPerPage ?? true}
                       focused
                       onActivate={() => activatePart(section, part)}
@@ -846,6 +849,7 @@ function TestBuilderPageInner() {
                       linkedQuestions={linkedBlockQuestions}
                       numberFormat={test.settings.questionNumberFormat}
                       examType={examType}
+                      sectionType={section.sectionType}
                       onActivate={() => activateBlock(section, block)}
                       onSave={async (input) => setTest(await testsApi.updateMaterialBlock(test.id, section.id, block.id, input))}
                       onDelete={() => askDeleteBlock(section, block)}

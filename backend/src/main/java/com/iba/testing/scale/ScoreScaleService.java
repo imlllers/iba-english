@@ -217,6 +217,7 @@ public class ScoreScaleService {
             list.add(ielts(mapper));
             list.add(toefl(mapper));
             list.add(toeic(mapper));
+            list.add(toeicSw(mapper));
             return list;
         } catch (JsonProcessingException broken) {
             throw new IllegalStateException(broken);
@@ -249,8 +250,17 @@ public class ScoreScaleService {
         ArrayNode sections = mapper.createArrayNode();
         sections.add(section(mapper, "Listening", 5, 495, 5, tableConvert(mapper, 100, table)));
         sections.add(section(mapper, "Reading", 5, 495, 5, tableConvert(mapper, 100, table.deepCopy())));
-        return exam(mapper, "toeic", "TOEIC", sections, "sum", null, levels(mapper,
+        return exam(mapper, "toeic", "TOEIC Listening & Reading", sections, "sum", null, levels(mapper,
                 "A1", 120, 220, "A2", 225, 545, "B1", 550, 780, "B2", 785, 940, "C1", 945, 990));
+    }
+
+    private static ObjectNode toeicSw(ObjectMapper mapper) {
+        ArrayNode sections = mapper.createArrayNode();
+        sections.add(section(mapper, "Speaking", 0, 200, 10, manual(mapper)));
+        sections.add(section(mapper, "Writing", 0, 200, 10, manual(mapper)));
+        ObjectNode scale = exam(mapper, "toeic_sw", "TOEIC Speaking & Writing", sections, "sum", null, mapper.createArrayNode());
+        scale.put("examType", "TOEIC");
+        return scale;
     }
 
     private static ObjectNode exam(

@@ -683,27 +683,30 @@ export function MediaPage() {
                                 wrap="nowrap"
                                 align="center"
                                 className="media-file-rename"
-                                style={{ minWidth: 0 }}
                               >
-                                <input
-                                  ref={renameInput}
-                                  value={renameValue}
-                                  disabled={renameAsset.isPending}
-                                  aria-label={`Название файла «${asset.filename}»`}
-                                  style={{ minWidth: 0, flex: 1 }}
-                                  onChange={(event) => setRenameValue(event.currentTarget.value)}
-                                  onBlur={() => commitRenameFile(asset)}
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Enter") {
-                                      event.preventDefault();
-                                      event.currentTarget.blur();
-                                    }
-                                    if (event.key === "Escape") {
-                                      event.preventDefault();
-                                      cancelRename();
-                                    }
-                                  }}
-                                />
+                                <Box className="media-file-rename-grow">
+                                  <span className="media-file-rename-sizer" aria-hidden>
+                                    {renameValue || "\u00a0"}
+                                  </span>
+                                  <input
+                                    ref={renameInput}
+                                    value={renameValue}
+                                    disabled={renameAsset.isPending}
+                                    aria-label={`Название файла «${asset.filename}»`}
+                                    onChange={(event) => setRenameValue(event.currentTarget.value)}
+                                    onBlur={() => commitRenameFile(asset)}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") {
+                                        event.preventDefault();
+                                        event.currentTarget.blur();
+                                      }
+                                      if (event.key === "Escape") {
+                                        event.preventDefault();
+                                        cancelRename();
+                                      }
+                                    }}
+                                  />
+                                </Box>
                                 {renameExtension ? (
                                   <Text component="span" fw={600} style={{ flex: "none", userSelect: "none" }}>
                                     {renameExtension}

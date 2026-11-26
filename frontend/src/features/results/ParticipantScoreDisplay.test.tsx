@@ -54,4 +54,41 @@ describe("ParticipantScoreDisplay", () => {
     expect(screen.queryByText("Overall Score")).toBeNull();
     expect(screen.getByText("Listening").textContent).toBe("Listening");
   });
+
+  it("uses totalMax for TOEIC overall gauge", () => {
+    const toeic: ScaleResult = {
+      title: "TOEIC Listening & Reading",
+      complete: true,
+      total: 600,
+      totalMax: 990,
+      hasLevels: true,
+      level: "B1",
+      sections: [
+        { index: 0, name: "Listening", method: "table", min: 5, max: 495, step: 5, testSectionTitle: "Listening", raw: 80, rawMax: 100, score: 300, pending: false },
+        { index: 1, name: "Reading", method: "table", min: 5, max: 495, step: 5, testSectionTitle: "Reading", raw: 70, rawMax: 100, score: 300, pending: false },
+      ],
+    };
+    wrap(<ParticipantScoreDisplay scale={toeic} examType="TOEIC" />);
+    expect(screen.getByText("600 of 990").textContent).toBe("600 of 990");
+    const labels = screen.getAllByText(/Listening|Reading/).map((node) => node.textContent);
+    expect(labels[0]).toBe("Listening");
+    expect(labels[1]).toBe("Reading");
+  });
+
+  it("shows pending manual section", () => {
+    const sw: ScaleResult = {
+      title: "TOEIC Speaking & Writing",
+      complete: false,
+      total: null,
+      totalMax: 400,
+      hasLevels: false,
+      level: null,
+      sections: [
+        { index: 0, name: "Speaking", method: "manual", min: 0, max: 200, step: 10, testSectionTitle: "Speaking", raw: null, rawMax: null, score: null, pending: true },
+        { index: 1, name: "Writing", method: "manual", min: 0, max: 200, step: 10, testSectionTitle: "Writing", raw: null, rawMax: null, score: null, pending: true },
+      ],
+    };
+    wrap(<ParticipantScoreDisplay scale={sw} examType="TOEIC" hideOverall />);
+    expect(screen.getAllByText("Score coming soon").length).toBe(2);
+  });
 });

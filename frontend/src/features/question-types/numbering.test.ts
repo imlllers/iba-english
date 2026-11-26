@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatQuestionRange,
   formatQuestionsHeading,
+  toeflQuestionBlockHeading,
   numberQuestionsByScope,
   numberQuestionsInTest,
   ownQuestionsHeading,
@@ -107,6 +108,11 @@ describe("MULTI_SELECT IELTS slots", () => {
     expect(formatQuestionsHeading(19, 20)).toBe("Questions 19-20");
     expect(formatQuestionRange(19, 2)).toBe("19-20");
     expect(formatQuestionsHeading(11, 16)).toBe("Questions 11-16");
+  });
+
+  it("toeflQuestionBlockHeading uses singular Question", () => {
+    expect(toeflQuestionBlockHeading(1, 1)).toBe("Question 1");
+    expect(toeflQuestionBlockHeading(19, 2)).toBe("Question 19-20");
   });
 
   it("ownQuestionsHeading matches shared / multi-select ranges", () => {

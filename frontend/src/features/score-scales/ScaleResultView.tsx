@@ -102,12 +102,20 @@ export function ScaleResultView({ result, onManual, showRaw = true, examType, pa
           {result.total !== null ? (
             <>
               <Text>Total: <Text span fw={700}>{formatNumber(result.total)}</Text></Text>
-              {result.level ? <Badge size="lg">{result.level}</Badge> : <SettingsHint>The total does not match any level of the scale</SettingsHint>}
+              {result.level ? (
+                <Badge size="lg">{result.level}</Badge>
+              ) : result.hasLevels !== false ? (
+                <SettingsHint>The total does not match any level of the scale</SettingsHint>
+              ) : null}
             </>
           ) : overallHint ? (
             <SettingsHint>{overallHint}</SettingsHint>
           ) : (
-            <SettingsHint>The total and level will appear when all sections are scored</SettingsHint>
+            <SettingsHint>
+              {result.hasLevels !== false
+                ? "The total and level will appear when all sections are scored"
+                : "The total will appear when all sections are scored"}
+            </SettingsHint>
           )}
         </Group>
       )}

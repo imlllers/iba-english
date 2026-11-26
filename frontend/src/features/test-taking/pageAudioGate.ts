@@ -87,8 +87,9 @@ export function speakingPromptCanStart(
   readingDone: ReadonlySet<string>,
   demoMode = false,
 ) {
+  void demoMode;
   const seconds = question.settings.readingSeconds;
-  if (!demoMode && typeof seconds === "number" && seconds > 0 && !readingDone.has(question.id)) {
+  if (typeof seconds === "number" && seconds > 0 && !readingDone.has(question.id)) {
     return false;
   }
   const blockId = question.materialBlockId ?? page.block?.id ?? null;

@@ -439,7 +439,11 @@ function SectionDialog({ section, creating, settings, onClose, onSave }: {
 }) {
   const [draft, setDraft] = useState(section);
   const [parts, setParts] = useState<PartRow[]>(() =>
-    (section.parts ?? []).map((part) => ({ id: ++partSeq, title: part.title, oneQuestionPerPage: part.oneQuestionPerPage ?? null })),
+    (section.parts ?? []).map((part) => ({
+      id: ++partSeq,
+      title: part.title,
+      oneQuestionPerPage: part.oneQuestionPerPage ?? null,
+    })),
   );
   const [submitted, setSubmitted] = useState(false);
   const patch = (next: Partial<PresetSectionSkeleton>) => setDraft((current) => ({ ...current, ...next }));
@@ -449,7 +453,6 @@ function SectionDialog({ section, creating, settings, onClose, onSave }: {
 
   const defaultOneQuestionPerPage = settings.oneQuestionPerPage !== false;
   const perPageOptions = partPerPageOptions(defaultOneQuestionPerPage);
-
   const save = () => {
     setSubmitted(true);
     if (problem) return;
@@ -458,7 +461,10 @@ function SectionDialog({ section, creating, settings, onClose, onSave }: {
       title: draft.title.trim(),
       parts: parts
         .filter((part) => part.title.trim())
-        .map((part) => ({ title: part.title.trim(), oneQuestionPerPage: part.oneQuestionPerPage })),
+        .map((part) => ({
+          title: part.title.trim(),
+          oneQuestionPerPage: part.oneQuestionPerPage,
+        })),
     });
   };
 
@@ -559,7 +565,11 @@ function SectionDialog({ section, creating, settings, onClose, onSave }: {
             size="compact-sm"
             leftSection={<Icon name="plus" />}
             style={{ alignSelf: "flex-start" }}
-            onClick={() => setParts((current) => [...current, { id: ++partSeq, title: `Part ${current.length + 1}`, oneQuestionPerPage: null }])}
+            onClick={() => setParts((current) => [...current, {
+              id: ++partSeq,
+              title: `Part ${current.length + 1}`,
+              oneQuestionPerPage: null,
+            }])}
           >
             Добавить часть
           </Button>

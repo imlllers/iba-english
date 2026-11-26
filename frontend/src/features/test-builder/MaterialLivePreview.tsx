@@ -1,17 +1,22 @@
 import { Box, Card, Stack, Text } from "@mantine/core";
 import { useEffect, useState, type ReactNode } from "react";
 import type { AnswerData, ContentItem, Doc, Question } from "@/entities/question/types";
-import type { ExamDisplayType, QuestionNumberFormat } from "@/entities/test/types";
+import type { ExamDisplayType, PartExample, QuestionNumberFormat, SectionType } from "@/entities/test/types";
+import { toeflQuestionBlockHeading } from "@/features/question-types/numbering";
+import { PartExampleView } from "@/features/question-types/content/PartExampleView";
+import { partExampleFilled } from "@/features/question-types/content/partExample";
 import { publicView } from "@/features/question-types/content";
 import { contentItemFilled } from "@/features/question-types/content/contentItems";
 import { ContentFeedView } from "@/features/question-types/content/ContentFeedView";
 import { instructionHasContent } from "@/features/question-types/content/instructionDoc";
 import { passageFrameStyle, shouldFrameContentItems } from "@/features/question-types/content/passageFrame";
 import { formatQuestionRange, ownQuestionsHeading, questionSlotCount } from "@/features/question-types/numbering";
+import { ScopeInstructionView } from "@/features/question-types/content/ScopeInstructionView";
 import { PromptView } from "@/features/question-types/prompt/PromptView";
 import { QuestionPlayer } from "@/features/question-types/QuestionPlayer";
 import { ToeflElevatedInstruction } from "@/features/test-taking/layouts/toefl/ToeflElevatedInstruction";
 import { previewBlockHasSideText, toeflPageInstructionDoc } from "@/features/test-taking/layouts/toefl/toeflPageInstruction";
+import { toeicBlockGroupPreview } from "@/features/test-taking/toeicGroupLayout";
 
 type PreviewQuestion = {
   question: Question;
@@ -29,6 +34,8 @@ type MaterialLivePreviewProps = {
   numberFormat?: QuestionNumberFormat;
   examType?: ExamDisplayType;
   previewScope?: MaterialPreviewScope;
+  example?: PartExample | null;
+  sectionType?: SectionType | null;
 };
 
 export function MaterialLivePreview({
@@ -40,18 +47,29 @@ export function MaterialLivePreview({
   numberFormat = "1",
   examType = "CUSTOM",
   previewScope = "block",
+  example = null,
+  sectionType = null,
 }: MaterialLivePreviewProps) {
+  const partIntroPreview = previewScope === "part" && (examType === "TOEIC" || examType === "CUSTOM");
   const hasInstructions = instructionHasContent(instructions);
   const hasMedia = items.some(contentItemFilled);
   const hasTitle = Boolean(title?.trim());
   const hasQuestions = questions.length > 0;
-  const empty = !hasTitle && !hasInstructions && !hasMedia && !hasQuestions;
+  const hasExample = partIntroPreview && partExampleFilled(example);
+  const empty = !hasTitle && !hasInstructions && !hasMedia && !hasQuestions && !hasExample;
   const toefl = examType === "TOEFL";
   const blockPreview = previewScope === "block";
   const blockAudio = items.some((item) => item.kind === "audio" && item.mediaId);
   const audioGroupListenOnly = toefl && blockPreview && blockAudio && questions.length > 1;
   const listenItems = items.filter((item) => item.kind !== "text");
-  const sideText = toefl && blockPreview && !audioGroupListenOnly && previewBlockHasSideText(items);
+  const toeicListening = examType === "TOEIC" && sectionType === "LISTENING";
+  const toeicTaskHeading = examType === "TOEIC" && (sectionType === "SPEAKING" || sectionType === "WRITING");
+  const toeicGroupLayout = toeicBlockGroupPreview(examType, blockPreview, hasQuestions, items, hasInstructions);
+  const sideText = toefl
+    && blockPreview
+    && !audioGroupListenOnly
+    && previewBlockHasSideText(items)
+    && hasQuestions;
   const inBlockContext = toefl && blockPreview && !audioGroupListenOnly;
   const [answers, setAnswers] = useState<Record<string, AnswerData>>({});
   const questionIds = questions.map((item) => item.question.id).join("|");
@@ -84,6 +102,10 @@ export function MaterialLivePreview({
       : null;
     const elevated = elevatedDoc != null;
     const showElevatedHere = elevated && !topBlockInstructionDoc;
+    const toeicSpeakingPreview = examType === "TOEIC" && sectionType === "SPEAKING";
+    const readingTotal = typeof question.settings.readingSeconds === "number" && question.settings.readingSeconds > 0
+      ? question.settings.readingSeconds
+      : 0;
     return (
       <Stack key={question.id} gap="md">
         {showElevatedHere && elevatedDoc ? <ToeflElevatedInstruction doc={elevatedDoc} /> : null}
@@ -95,12 +117,20 @@ export function MaterialLivePreview({
           startNumber={startNumber}
           numberFormat={numberFormat}
           examType={examType}
-          hideQuestionsHeading={toefl || Boolean(groupTitle && ownHeading === groupTitle)}
+          hideQuestionsHeading={
+            toefl || examType === "TOEIC" || Boolean(groupTitle && ownHeading === groupTitle)
+          }
           hideInstructions={elevated}
-          hideTaskAudio={toefl}
-          hideBlankNumbers={toefl}
-          parenLetters={toefl}
+          hideTaskAudio={toefl || toeicListening}
+          hideBlankNumbers={toefl || examType === "TOEIC"}
+          parenLetters={toefl || examType === "TOEIC"}
           headingBelowInstructions={toefl}
+          questionBlockHeading={toeicTaskHeading ? toeflQuestionBlockHeading(startNumber, count) : undefined}
+          speakingAutoFlow={toeicSpeakingPreview}
+          speakingPreviewStatic={toeicSpeakingPreview}
+          speakingPromptReady={!toeicSpeakingPreview || readingTotal <= 0}
+          speakingReadingRemaining={toeicSpeakingPreview && readingTotal > 0 ? readingTotal : undefined}
+          toeicGroupPane={toeicGroupLayout && blockPreview}
         />
       </Stack>
     );
@@ -113,6 +143,9 @@ export function MaterialLivePreview({
     if (toefl && blockPreview) {
       return <ToeflElevatedInstruction doc={instructions} pageLead={!audioGroupListenOnly} />;
     }
+    if (examType === "TOEIC" && previewScope === "part") {
+      return <ScopeInstructionView doc={instructions} examType={examType} scope="part" />;
+    }
     return (
       <Box className="iba-test-copy" style={{ fontSize: "var(--type-body, 1rem)", fontWeight: 500 }}>
         <PromptView doc={instructions} />
@@ -124,13 +157,16 @@ export function MaterialLivePreview({
     <ToeflElevatedInstruction doc={topBlockInstructionDoc} />
   ) : null;
 
-  const mediaNode = (feed: ContentItem[]) => (
-    feed.some(contentItemFilled) ? (
-      <Box style={shouldFrameContentItems(feed, examType) ? passageFrameStyle : undefined}>
-        <ContentFeedView items={feed} hideAudio={toefl && blockPreview} />
+  const mediaNode = (feed: ContentItem[]) => {
+    const visible = toeicListening
+      ? feed.filter((item) => !(item.kind === "audio" && item.mediaId))
+      : feed;
+    return visible.some(contentItemFilled) ? (
+      <Box style={shouldFrameContentItems(visible, examType) ? passageFrameStyle : undefined}>
+        <ContentFeedView items={visible} hideAudio={toefl && blockPreview} />
       </Box>
-    ) : null
-  );
+    ) : null;
+  };
 
   const scopeTitle = hasTitle ? (
     <Text
@@ -156,7 +192,31 @@ export function MaterialLivePreview({
       </Stack>
     );
   } else if (!toefl) {
-    body = (
+    body = partIntroPreview ? (
+      <Stack gap="sm">
+        {instructionNode}
+        {hasExample ? <PartExampleView example={example} framed={examType !== "TOEIC"} /> : null}
+      </Stack>
+    ) : toeicGroupLayout ? (
+      <Box
+        className="runner-toeic-group-split runner-question-split runner-question-split--toeic-group"
+        data-runner-layout="toeic"
+        style={{
+          display: "grid",
+          gap: "var(--runner-toeic-column-gap)",
+          alignItems: "start",
+          width: "100%",
+        }}
+      >
+        <Box className="runner-group-passage">
+          {mediaNode(items)}
+        </Box>
+        <Stack gap="sm" className="runner-toeic-group-questions">
+          {instructionNode}
+          {questionNodes}
+        </Stack>
+      </Box>
+    ) : (
       <>
         <Stack gap="sm">
           {scopeTitle}
@@ -228,6 +288,55 @@ export function MaterialLivePreview({
     );
   }
 
+  if (examType === "TOEIC" && (previewScope === "section" || previewScope === "part")) {
+    return (
+      <ToeicPreviewShell ariaLabel={ariaLabel}>
+        <Stack gap="xl" w="100%" className="iba-test-copy" style={{ fontWeight: 500, fontSize: "var(--type-body, 1rem)" }}>
+          {hasTitle ? (
+            <Text
+              fw={700}
+              ta="center"
+              style={{ fontSize: "var(--type-h5-size)", lineHeight: "var(--type-h5-line)" }}
+            >
+              {groupTitle}
+            </Text>
+          ) : null}
+          {previewScope === "part" && hasInstructions ? (
+            <ScopeInstructionView doc={instructions} examType="TOEIC" scope="part" />
+          ) : null}
+          {previewScope === "section" && hasInstructions ? (
+            <Box className="iba-test-copy" style={{ fontSize: "var(--type-body, 1rem)", fontWeight: 500 }}>
+              <PromptView doc={instructions} />
+            </Box>
+          ) : null}
+          {previewScope === "part" && partExampleFilled(example) ? (
+            <PartExampleView example={example} hideAudio={toeicListening} framed={false} />
+          ) : null}
+          {empty ? (
+            <Text size="sm" c="dimmed" fw={500}>
+              Пока нечего показать участнику
+            </Text>
+          ) : null}
+        </Stack>
+      </ToeicPreviewShell>
+    );
+  }
+
+  if (examType === "TOEIC" && previewScope === "block") {
+    return (
+      <ToeicPreviewShell ariaLabel={ariaLabel}>
+        <Stack gap="md" className="iba-test-copy" style={{ fontWeight: 500, fontSize: "var(--type-body, 1rem)" }}>
+          {body}
+          {empty ? (
+            <Text size="sm" c="dimmed" fw={500}>
+              Пока нечего показать участнику
+            </Text>
+          ) : null}
+        </Stack>
+      </ToeicPreviewShell>
+    );
+  }
+
   return (
     <Card
       component="aside"
@@ -241,6 +350,7 @@ export function MaterialLivePreview({
         className="iba-test-copy"
         style={{ fontWeight: 500, fontSize: "var(--type-body, 1rem)" }}
       >
+        {scopeTitle}
         {body}
         {empty ? (
           <Text size="sm" c="dimmed" fw={500}>
@@ -248,6 +358,31 @@ export function MaterialLivePreview({
           </Text>
         ) : null}
       </Stack>
+    </Card>
+  );
+}
+
+export function ToeicPreviewShell({
+  ariaLabel,
+  children,
+}: {
+  ariaLabel: string;
+  children: ReactNode;
+}) {
+  return (
+    <Card
+      component="aside"
+      shadow="sm"
+      bg="white"
+      aria-label={ariaLabel}
+      data-card-action
+      data-runner-layout="toeic"
+      px="md"
+      py="sm"
+      className="runner-task-card iba-test-copy"
+      style={{ fontWeight: 500, fontSize: "var(--type-body, 1rem)" }}
+    >
+      {children}
     </Card>
   );
 }

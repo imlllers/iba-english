@@ -14,6 +14,7 @@ import com.iba.testing.section.TestSectionRepository;
 import com.iba.testing.template.ExamTemplateService;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -56,5 +57,13 @@ class ExamTestServiceSettingsTest {
         ObjectNode cleaned = service.cleanSettings(raw);
         assertTrue(cleaned.path("autoAdvanceOnPartTimeout").asBoolean());
         assertTrue(cleaned.path("pausePartTimerDuringAudio").asBoolean());
+    }
+
+    @Test
+    void cleanSettingsDefaultsToeflQuestionNumberFormat() {
+        ObjectNode raw = new ObjectMapper().createObjectNode();
+        raw.put("examType", "TOEFL");
+        ObjectNode cleaned = service.cleanSettings(raw);
+        assertEquals("1.", cleaned.path("questionNumberFormat").asText());
     }
 }

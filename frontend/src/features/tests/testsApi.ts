@@ -1,7 +1,7 @@
 import { api, json, queryString } from "@/shared/api/client";
 import type { Page } from "@/shared/api/types";
 import type { ContentItem, Doc, Question, QuestionType } from "@/entities/question/types";
-import type { AccessStatus, ExamTest, Preset, PublicTest, SectionType, TestSettings, TestSummary } from "@/entities/test/types";
+import type { AccessStatus, ExamTest, PartExample, Preset, PublicTest, SectionType, TestSettings, TestSummary } from "@/entities/test/types";
 
 const base = "/api/teacher/tests";
 
@@ -30,6 +30,7 @@ export type PartInput = {
   timeLimitSeconds?: number | null;
   oneQuestionPerPage?: boolean | null;
   items?: ContentItem[];
+  example?: PartExample | null;
 };
 export type MaterialBlockInput = {
   title?: string;

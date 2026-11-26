@@ -31,7 +31,7 @@ import { EXAM_TYPE_OPTIONS, isExamTypeDisabled } from "@/entities/test/settings"
 
 const KEY = ["score-scales"];
 
-const BUILTIN_IDS = new Set(["ielts", "toefl", "toeic"]);
+const BUILTIN_IDS = new Set(["ielts", "toefl", "toeic", "toeic_sw"]);
 
 const CEFR = ["A1", "A2", "B1", "B2", "C1", "C2"];
 

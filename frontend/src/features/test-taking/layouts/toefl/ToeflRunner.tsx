@@ -18,7 +18,6 @@ import { QuestionPlayer, isAnswered } from "@/features/question-types/QuestionPl
 import { engineOf } from "@/features/question-types/registry";
 import { useNow } from "@/shared/lib/useNow";
 import { limitSecondsFromSection } from "@/shared/lib/durationMmSs";
-import { ConfirmDialog } from "@/shared/ui/ConfirmDialog";
 import { PasswordVisibilityIcon } from "@/shared/ui/PasswordVisibilityIcon";
 import { SettingsHint } from "@/shared/ui/SettingsHint";
 import { Countdown } from "../../Countdown";
@@ -33,6 +32,7 @@ import {
 import { partLimitSeconds } from "../../partTiming";
 import { pageInteractionReady, partTimerReady } from "../../partTimerGate";
 import { pageReadingPending, questionReadingSeconds } from "../../readingPhase";
+import { isSpeakingAutoFlow } from "../../speakingAutoFlow";
 import { buildRunnerPages, type RunnerPage } from "../../runnerPages";
 import {
   blockHasAudio,
@@ -48,15 +48,15 @@ import {
   filterBlockItemsWithoutGroupVisual,
 } from "./resolveQuestionVisual";
 import { shouldAutoPlayQuestionTaskVideo } from "./questionTaskVideo";
-import { resolveChromeProgressPage, scopeSlotTotal, toeflChromeProgress } from "./toeflChromeProgress";
 import { toeflFullWidthQuestionPane, toeflPageInstructionDoc } from "./toeflPageInstruction";
 import { publicApi } from "../../publicApi";
 import { TakeHeader } from "../../TakeHeader";
 import { useFocusLossGuard } from "../../useFocusLossGuard";
 import { usePersistentPageIndex } from "../../usePersistentPageIndex";
 import { navUnits } from "../../navUnits";
+import { withDemoPageNav } from "../../RunnerDemoChromeLayout";
 import { showRunnerBack, showRunnerForward } from "../../runnerChromeNav";
-import { canGoToToeflPage, needsToeflForwardConfirm, toeflAllowChromeNext } from "./toeflNavigation";
+import { canGoToToeflPage, toeflAllowChromeNext } from "./toeflNavigation";
 import type { TestRunnerProps } from "../../runnerTypes";
 import { RunnerScrollPane } from "../../RunnerScrollPane";
 
@@ -96,7 +96,6 @@ export function ToeflRunner(props: TestRunnerProps) {
   const [index, setIndex] = usePersistentPageIndex(pages, pageStorageKey);
   const [focusSlot, setFocusSlot] = useState<number | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const [forwardConfirm, setForwardConfirm] = useState(false);
   const [sessionAudioDone, setSessionAudioDone] = useState(() => new Set(initialAudioDone));
   const [autoPlayBlocked, setAutoPlayBlocked] = useState(false);
   const [listenNonce, setListenNonce] = useState(0);
@@ -132,6 +131,10 @@ export function ToeflRunner(props: TestRunnerProps) {
   const pausePartTimerDuringAudio = Boolean(test.settings.pausePartTimerDuringAudio);
   const [readingDone, setReadingDone] = useState(() => new Set(initialReadingDone));
   const [readingLeft, setReadingLeft] = useState<Record<string, number>>({});
+  const persistReadingStartRef = useRef(onPersistReadingStart);
+  persistReadingStartRef.current = onPersistReadingStart;
+  const persistReadingDoneRef = useRef(onPersistReadingDone);
+  persistReadingDoneRef.current = onPersistReadingDone;
   const [readingTick, setReadingTick] = useState(0);
   const timedSectionTypes = test.settings.timeLimitSectionTypes ?? [];
   const numberFormat = normalizeQuestionNumberFormat(test.settings.questionNumberFormat);
@@ -248,8 +251,10 @@ export function ToeflRunner(props: TestRunnerProps) {
       return;
     }
     setIndex(clamped);
-    top.current?.scrollTo({ top: 0 });
-  }, [canGoTo, pages.length]);
+    if (!demoMode) {
+      top.current?.scrollTo({ top: 0 });
+    }
+  }, [canGoTo, demoMode, pages.length]);
 
   const advanceTo = useCallback((next: number) => {
     void (async () => {
@@ -312,7 +317,7 @@ export function ToeflRunner(props: TestRunnerProps) {
   }, [current?.key, current?.start, current?.end]);
 
   useEffect(() => {
-    if (!current || demoMode) {
+    if (!current) {
       return;
     }
     const timers: Array<ReturnType<typeof setInterval>> = [];
@@ -323,7 +328,9 @@ export function ToeflRunner(props: TestRunnerProps) {
       const total = questionReadingSeconds(question);
       if (!readingStartedAnnounced.current.has(question.id)) {
         readingStartedAnnounced.current.add(question.id);
-        onPersistReadingStart?.(question.id);
+        if (!demoMode) {
+          persistReadingStartRef.current?.(question.id);
+        }
       }
       const started = initialReadingStarted[question.id]
         ? new Date(initialReadingStarted[question.id]).getTime()
@@ -331,7 +338,9 @@ export function ToeflRunner(props: TestRunnerProps) {
       const timer = setInterval(() => {
         const left = total - Math.floor((Date.now() - started) / 1000);
         if (left <= 0) {
-          onPersistReadingDone?.(question.id);
+          if (!demoMode) {
+            persistReadingDoneRef.current?.(question.id);
+          }
           setReadingDone((currentDone) => {
             const next = new Set(currentDone);
             next.add(question.id);
@@ -354,7 +363,7 @@ export function ToeflRunner(props: TestRunnerProps) {
     return () => {
       timers.forEach((timer) => clearInterval(timer));
     };
-  }, [current?.key, demoMode, readingDone, initialReadingStarted, onPersistReadingDone, onPersistReadingStart]);
+  }, [current?.key, demoMode, readingDone, initialReadingStarted]);
 
   useEffect(() => {
     if (!current) {
@@ -534,10 +543,6 @@ export function ToeflRunner(props: TestRunnerProps) {
     }
   }, [current?.key, current?.groupContent, current?.block, examAudioOn, gateActiveKey, index, pages.length, sessionAudioDone, advanceTo]);
 
-  useEffect(() => {
-    setForwardConfirm(false);
-  }, [index]);
-
   const handleAnswer = useCallback((questionId: string, answer: AnswerData) => {
     setExplanations((prev) => {
       if (!(questionId in prev)) {
@@ -647,7 +652,7 @@ export function ToeflRunner(props: TestRunnerProps) {
     && !blockPassageFilled
     && !pageUsesFullWidthPane,
   );
-  const speakingAutoFlow = Boolean(current?.section.speakingAutoFlow);
+  const speakingAutoFlow = isSpeakingAutoFlow(examType, current?.section);
   const pageInstructionDoc = useMemo((): Doc | null => {
     if (!current || current.intro || current.groupContent) {
       return null;
@@ -754,11 +759,7 @@ export function ToeflRunner(props: TestRunnerProps) {
       ) : null;
 
   const chromeProgressLabel = current
-    ? toeflChromeProgress(
-      current.section,
-      resolveChromeProgressPage(pages, index, current, numberScope),
-      scopeSlotTotal(pages, current, numberScope),
-    )
+    ? (current.section.title?.trim() || current.section.title)
     : null;
   const headerProgressLabel = confirming ? "Submit" : chromeProgressLabel;
   const submitSummary = unansweredSlots === 0
@@ -832,10 +833,6 @@ export function ToeflRunner(props: TestRunnerProps) {
   };
 
   const stepForward = (next: number) => {
-    if (needsToeflForwardConfirm(index, next, pages, demoMode)) {
-      setForwardConfirm(true);
-      return;
-    }
     go(next);
   };
 
@@ -866,9 +863,16 @@ export function ToeflRunner(props: TestRunnerProps) {
       return;
     }
     setFocusSlot(slot);
+    const samePage = pageIndex === index;
     goChecked(pageIndex);
+    if (demoMode) {
+      return;
+    }
+    if (!samePage) {
+      return;
+    }
     requestAnimationFrame(() => {
-      document.getElementById(`runner-slot-${page.key}-${slot}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+      document.getElementById(`runner-slot-${page.key}-${slot}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     });
   };
 
@@ -940,7 +944,7 @@ export function ToeflRunner(props: TestRunnerProps) {
                   && current.part?.id === group.partId
                   && (current as ToeflPage).intro === "part",
                 );
-                const showPartTitle = group.partId != null || section.parts.length > 1;
+                const showPartTitle = group.partId != null;
                 const openGroup = () => {
                   goNavPage(partEntryPage(group));
                 };
@@ -978,7 +982,7 @@ export function ToeflRunner(props: TestRunnerProps) {
                             && focusSlot !== null
                             && focusSlot >= unit.start
                             && focusSlot <= unit.end;
-                          const label = formatQuestionRange(unit.start, unit.total);
+                          const label = formatQuestionRange(unit.start, unit.total, numberFormat);
                           return (
                             <Box component="li" key={unit.key}>
                               <UnstyledButton
@@ -1211,6 +1215,15 @@ export function ToeflRunner(props: TestRunnerProps) {
                   videoAutoStart,
                 )}
                 speakingAutoFlow={speakingAutoFlow}
+                speakingReadingRemaining={
+                  speakingAutoFlow
+                  && speakingQuestion
+                  && questionReadingSeconds(question) > 0
+                  && !readingDone.has(question.id)
+                  && !demoMode
+                    ? (readingLeft[question.id] ?? questionReadingSeconds(question))
+                    : undefined
+                }
                 onSpeakingComplete={() => {
                   if (index < pages.length - 1) {
                     advanceTo(index + 1);
@@ -1234,7 +1247,8 @@ export function ToeflRunner(props: TestRunnerProps) {
                   />
                 ))}
               </Box>
-              {questionReadingSeconds(question) > 0 && !readingDone.has(question.id) && !demoMode ? (
+              {questionReadingSeconds(question) > 0 && !readingDone.has(question.id) && !demoMode
+                && !(speakingAutoFlow && speakingQuestion) ? (
                 <Countdown label="Reading" seconds={readingLeft[question.id] ?? questionReadingSeconds(question)} />
               ) : null}
               {audioPending && !listening ? (
@@ -1283,7 +1297,7 @@ export function ToeflRunner(props: TestRunnerProps) {
 
   const partHeaderSeconds = currentPartLeft !== null
     ? currentPartLeft
-    : (current?.part && partLimitSeconds(current.part) > 0 && current.part.id && partEnds[current.part.id] == null
+    : (demoMode && current?.part && partLimitSeconds(current.part) > 0 && current.part.id && partEnds[current.part.id] == null
       ? partLimitSeconds(current.part)
       : null);
   const partTimerInChrome = partHeaderSeconds !== null && partHeaderSeconds > 0;
@@ -1291,7 +1305,7 @@ export function ToeflRunner(props: TestRunnerProps) {
     ? null
     : currentSectionLeft !== null
       ? currentSectionLeft
-      : (current?.section
+      : (demoMode && current?.section
         && limitSecondsFromSection(current.section) > 0
         && sectionEnds[current.section.id] == null
         ? limitSecondsFromSection(current.section)
@@ -1344,44 +1358,39 @@ export function ToeflRunner(props: TestRunnerProps) {
   const showForward = onLastPage
     ? !demoMode
     : showRunnerForward(index, pages.length, canGoTo, allowChromeNext, demoMode);
-  const earlyFinish = current && !demoMode && index < pages.length - 1 && allowEarlySubmit ? (
-      <Group justify="flex-end">
-        <Button
-          variant="subtle"
-          size="compact-sm"
-          loading={checking}
-          onClick={() => {
-            void (async () => {
-              const stayed = await checkCurrentPage();
-              if (!stayed) {
-                setConfirming(true);
-              }
-            })();
-          }}
-        >
-          Finish test early
-        </Button>
-      </Group>
+  const earlyFinishAction = current && !demoMode && !confirming && index < pages.length - 1 && allowEarlySubmit ? (
+    <Group justify="flex-end" w="100%">
+      <Button
+        variant="subtle"
+        size="compact-sm"
+        loading={checking}
+        onClick={() => {
+          void (async () => {
+            const stayed = await checkCurrentPage();
+            if (!stayed) {
+              setConfirming(true);
+            }
+          })();
+        }}
+      >
+        Finish test early
+      </Button>
+    </Group>
   ) : null;
   const showChromeNav = showBack || showForward;
-  const pageNav = current && (showChromeNav || earlyFinish) ? (
-    <Stack gap="sm">
-      {showChromeNav ? (
-        <Group justify="flex-end" gap="md" wrap="nowrap">
-          {showBack ? (
-            <Button size="md" variant="default" onClick={() => go(index - 1)}>
-              Back
-            </Button>
-          ) : null}
-          {showForward ? (
-            <Button size="md" color="iba" onClick={onChromeNext}>
-              {index < pages.length - 1 ? "Next" : "Finish"}
-            </Button>
-          ) : null}
-        </Group>
+  const pageNav = current && showChromeNav ? (
+    <Group justify="flex-end" gap="md" wrap="nowrap">
+      {showBack ? (
+        <Button size="md" variant="default" onClick={() => go(index - 1)}>
+          Back
+        </Button>
       ) : null}
-      {earlyFinish}
-    </Stack>
+      {showForward ? (
+        <Button size="md" color="iba" onClick={onChromeNext}>
+          {index < pages.length - 1 ? "Next" : "Finish"}
+        </Button>
+      ) : null}
+    </Group>
   ) : null;
 
   return (
@@ -1473,15 +1482,6 @@ export function ToeflRunner(props: TestRunnerProps) {
             <Group gap="md" wrap="nowrap">
               {timersVisible ? (
                 <>
-                  {focusLossMax > 0 && onFocusLossExhausted ? (
-                    <Text
-                      size="sm"
-                      c={focusGuard.count > 0 ? "orange.3" : undefined}
-                      style={{ whiteSpace: "nowrap", color: focusGuard.count > 0 ? undefined : "color-mix(in srgb, white 80%, transparent)" }}
-                    >
-                      Tab switches: {focusGuard.count} of {focusLossMax}
-                    </Text>
-                  ) : null}
                   {sectionHeaderSeconds !== null && sectionHeaderSeconds > 0 ? (
                     <Countdown label="Section" seconds={sectionHeaderSeconds} digitsOnly onDark />
                   ) : null}
@@ -1562,89 +1562,96 @@ export function ToeflRunner(props: TestRunnerProps) {
                   </Box>
                 </RunnerScrollPane>
               ) : current ? (
-              <>
-              {scopeHeading("main")}
-              {elevatedPageInstruction && pageInstructionDoc
-                ? renderGroupInstruction(pageInstructionDoc, true)
-                : null}
-              {current?.groupContent && current.block && !elevatedPageInstruction
-                && instructionHasContent(toInstructionDoc(current.block.instructions))
-                ? renderGroupInstruction(toInstructionDoc(current.block.instructions), true)
-                : null}
-              {useSplitLayout && current.block ? (
-                <Box
-                  className={stackSplitLayout ? "runner-question-split runner-question-split--stacked" : "runner-question-split"}
-                  style={{
-                    flex: 1,
-                    minHeight: 0,
-                    display: stackSplitLayout ? "flex" : "grid",
-                    flexDirection: stackSplitLayout ? "column" : undefined,
-                    gridTemplateColumns: stackSplitLayout ? undefined : "minmax(0, 1fr) minmax(0, 1fr)",
-                    gap: "var(--mantine-spacing-md)",
-                    alignItems: "stretch",
-                    overflow: "hidden",
-                  }}
-                >
-                  <RunnerScrollPane
-                    key={`block-${current.block.id}`}
-                    className="runner-group-passage"
-                    variant="embed"
-                    style={stackSplitLayout
-                      ? { flex: "none", height: "auto", maxHeight: "min(50vh, 520px)" }
-                      : { minHeight: 0, height: "100%" }}
-                  >
-                    {renderBlockPanel(current.block, {
-                      includeInstructions: false,
-                      itemsMode: splitGroupListen || current.listenedBlockMediaOnly ? "visual" : "auto",
-                      question: primaryQuestion,
-                    })}
-                  </RunnerScrollPane>
-                  <RunnerScrollPane
-                    className="runner-question-pane"
-                    variant="embed"
-                    style={stackSplitLayout
-                      ? { flex: 1, minHeight: 0, height: "auto" }
-                      : { minHeight: 0, height: "100%" }}
-                  >
-                    {questionStack}
-                  </RunnerScrollPane>
-                </Box>
-              ) : centeredQuestionPane ? (
-                <Box
-                  style={{
-                    flex: 1,
-                    minHeight: 0,
-                    display: "flex",
-                    justifyContent: "center",
-                    width: "100%",
-                  }}
-                >
-                  <RunnerScrollPane
-                    className="runner-question-pane runner-question-pane--centered"
-                    variant="embed"
-                    style={{
-                      height: "100%",
-                      minHeight: 0,
-                      width: "100%",
-                      maxWidth: "var(--runner-toefl-centered-pane-max)",
-                    }}
-                  >
-                    {questionStack}
-                  </RunnerScrollPane>
-                </Box>
-              ) : (
-                <RunnerScrollPane
-                  className="runner-page-body"
-                  variant="embed"
-                  style={{ flex: 1, minHeight: 0, height: "100%" }}
-                >
-                  {questionStack}
-                </RunnerScrollPane>
-              )}
-              {pageNav}
-              </>
+                withDemoPageNav(demoMode, pageNav, (
+                  <>
+                    {scopeHeading("main")}
+                    {elevatedPageInstruction && pageInstructionDoc
+                      ? renderGroupInstruction(pageInstructionDoc, true)
+                      : null}
+                    {current?.groupContent && current.block && !elevatedPageInstruction
+                      && instructionHasContent(toInstructionDoc(current.block.instructions))
+                      ? renderGroupInstruction(toInstructionDoc(current.block.instructions), true)
+                      : null}
+                    {useSplitLayout && current.block ? (
+                      <Box
+                        className={stackSplitLayout ? "runner-question-split runner-question-split--stacked" : "runner-question-split"}
+                        style={{
+                          flex: 1,
+                          minHeight: 0,
+                          display: stackSplitLayout ? "flex" : "grid",
+                          flexDirection: stackSplitLayout ? "column" : undefined,
+                          gridTemplateColumns: stackSplitLayout ? undefined : "minmax(0, 1fr) minmax(0, 1fr)",
+                          gap: "var(--mantine-spacing-md)",
+                          alignItems: "stretch",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <RunnerScrollPane
+                          key={`block-${current.block.id}`}
+                          persistScrollKey={`block-${current.block.id}`}
+                          className="runner-group-passage"
+                          variant="embed"
+                          style={stackSplitLayout
+                            ? { flex: "none", height: "auto", maxHeight: "min(50vh, 520px)" }
+                            : { minHeight: 0, height: "100%" }}
+                        >
+                          {renderBlockPanel(current.block, {
+                            includeInstructions: false,
+                            itemsMode: splitGroupListen || current.listenedBlockMediaOnly ? "visual" : "auto",
+                            question: primaryQuestion,
+                          })}
+                        </RunnerScrollPane>
+                        <RunnerScrollPane
+                          className="runner-question-pane"
+                          variant="embed"
+                          style={stackSplitLayout
+                            ? { flex: 1, minHeight: 0, height: "auto" }
+                            : { minHeight: 0, height: "100%" }}
+                        >
+                          {questionStack}
+                        </RunnerScrollPane>
+                      </Box>
+                    ) : centeredQuestionPane ? (
+                      <Box
+                        style={{
+                          flex: 1,
+                          minHeight: 0,
+                          display: "flex",
+                          justifyContent: "center",
+                          width: "100%",
+                        }}
+                      >
+                        <RunnerScrollPane
+                          className="runner-question-pane runner-question-pane--centered"
+                          variant="embed"
+                          style={{
+                            height: "100%",
+                            minHeight: 0,
+                            width: "100%",
+                            maxWidth: "var(--runner-toefl-centered-pane-max)",
+                          }}
+                        >
+                          {questionStack}
+                        </RunnerScrollPane>
+                      </Box>
+                    ) : (
+                      <RunnerScrollPane
+                        className="runner-page-body"
+                        variant="embed"
+                        style={{ flex: 1, minHeight: 0, height: "100%" }}
+                      >
+                        {questionStack}
+                      </RunnerScrollPane>
+                    )}
+                  </>
+                ))
               ) : null}
             </Box>
+            {!demoMode && earlyFinishAction ? (
+              <Box className="runner-demo-page-nav runner-demo-page-nav--in-card" style={{ flex: "none" }}>
+                {earlyFinishAction}
+              </Box>
+            ) : null}
           </Card>
           ) : null}
             </Box>
@@ -1684,21 +1691,6 @@ export function ToeflRunner(props: TestRunnerProps) {
           </Group>
         </Stack>
       </Modal>
-      {forwardConfirm && (
-        <ConfirmDialog
-          open
-          title="Continue?"
-          confirmLabel="Continue"
-          cancelLabel="Stay"
-          onConfirm={() => {
-            setForwardConfirm(false);
-            go(index + 1);
-          }}
-          onClose={() => setForwardConfirm(false)}
-        >
-          You will not be able to return to this module after you continue.
-        </ConfirmDialog>
-      )}
       <style>{`
         .runner-group-instruction {
           text-align: center;
@@ -1720,12 +1712,6 @@ export function ToeflRunner(props: TestRunnerProps) {
         }
         .runner-toefl-chrome .runner-toefl-timer-toggle:active {
           background: color-mix(in srgb, var(--mantine-color-white) 22%, transparent) !important;
-        }
-        .runner-toefl-chrome .runner-toefl-skip-audio {
-          border: 1px solid color-mix(in srgb, var(--mantine-color-white) 45%, transparent);
-        }
-        .runner-toefl-chrome .runner-toefl-skip-audio:hover {
-          border-color: color-mix(in srgb, var(--mantine-color-white) 70%, transparent) !important;
         }
         .runner-toefl-demo-nav-title {
           display: block;
@@ -1750,7 +1736,7 @@ export function ToeflRunner(props: TestRunnerProps) {
             display: flex !important;
             flex-direction: column !important;
             grid-template-columns: 1fr !important;
-            overflow: auto !important;
+            overflow: hidden !important;
           }
           [data-runner-layout="toefl"] .runner-question-split .runner-group-passage {
             height: auto !important;

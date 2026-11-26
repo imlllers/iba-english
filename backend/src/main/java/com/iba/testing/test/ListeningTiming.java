@@ -13,4 +13,11 @@ public final class ListeningTiming {
         }
         return question.path("settings").path("timeLimitSeconds").asInt(0);
     }
+
+    public static int questionLimit(String examType, JsonNode section, JsonNode question) {
+        if (question == null || question.isMissingNode()) {
+            return 0;
+        }
+        return questionLimit(question);
+    }
 }

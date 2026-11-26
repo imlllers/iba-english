@@ -108,6 +108,13 @@ export function formatQuestionsHeading(start: number, end: number): string {
   return start === end ? `Questions ${start}` : `Questions ${start}-${end}`;
 }
 
+export function toeflQuestionBlockHeading(start: number, count: number): string {
+  if (count <= 1) {
+    return `Question ${start}`;
+  }
+  return `Question ${start}-${start + count - 1}`;
+}
+
 export function ownQuestionsHeading(
   question: WithSlots,
   startNumber: number,

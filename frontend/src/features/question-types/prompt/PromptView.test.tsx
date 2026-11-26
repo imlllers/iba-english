@@ -46,7 +46,35 @@ const tableDoc: Doc = {
   }],
 };
 
+const letteredListDoc: Doc = {
+  type: "doc",
+  content: [{
+    type: "orderedList",
+    attrs: { type: "A" },
+    content: [
+      {
+        type: "listItem",
+        content: [{ type: "paragraph", content: [{ type: "text", text: "First paragraph" }] }],
+      },
+      {
+        type: "listItem",
+        content: [{ type: "paragraph", content: [{ type: "text", text: "Second paragraph" }] }],
+      },
+    ],
+  }],
+};
+
 describe("PromptView", () => {
+  it("renders paragraph text inside lettered list items", () => {
+    render(
+      <MantineProvider>
+        <PromptView doc={letteredListDoc} />
+      </MantineProvider>,
+    );
+    expect(screen.getByText("First paragraph")).toBeTruthy();
+    expect(screen.getByText("Second paragraph")).toBeTruthy();
+  });
+
   it("renders text inside table cells", () => {
     render(
       <MantineProvider>

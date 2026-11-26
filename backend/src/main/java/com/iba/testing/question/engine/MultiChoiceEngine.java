@@ -58,7 +58,7 @@ public class MultiChoiceEngine implements QuestionEngine {
 
     @Override
     public void validate(QuestionDraft draft, ContentCheck check) {
-        Set<String> ids = check.items(draft.options(), "options", "Варианты", 2);
+        Set<String> ids = check.items(draft.options(), "options", "Варианты", 2, false);
         check.object(draft.answerKey(), "answerKey");
         JsonNode correct = draft.answerKey().path("correctOptionIds");
         check.shape(correct.isMissingNode() || correct.isArray(), "answerKey", "Верные варианты должны быть списком");

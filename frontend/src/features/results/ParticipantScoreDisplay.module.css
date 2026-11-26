@@ -17,8 +17,8 @@
 
 .gaugeWrap {
   position: relative;
-  width: min(100%, 240px);
-  aspect-ratio: 240 / 136;
+  width: min(100%, 272px);
+  aspect-ratio: 272 / 152;
 }
 
 .gaugeSvg {

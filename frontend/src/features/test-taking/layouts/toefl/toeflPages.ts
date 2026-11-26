@@ -4,6 +4,7 @@ import { scopeItems } from "@/features/question-types/content/contentItems";
 import { instructionHasContent, toInstructionDoc } from "@/features/question-types/content/instructionDoc";
 import { questionSlotCount } from "@/features/question-types/numbering";
 import type { RunnerPage } from "../../runnerPages";
+import { partExampleFilled } from "@/features/question-types/content/partExample";
 
 export type ToeflPage = RunnerPage & {
   intro?: "section" | "part";
@@ -53,7 +54,16 @@ function resolveBlock(page: RunnerPage, blockId: string | null): MaterialBlock |
 
 function introPage(page: RunnerPage, kind: "section" | "part"): ToeflPage {
   const id = kind === "section" ? page.section.id : page.part?.id ?? page.section.id;
-  return { ...page, key: `intro-${kind}-${id}`, block: null, questions: [], count: 0, end: page.start - 1, intro: kind };
+  return {
+    ...page,
+    key: `intro-${kind}-${id}`,
+    part: kind === "section" ? null : page.part,
+    block: null,
+    questions: [],
+    count: 0,
+    end: page.start - 1,
+    intro: kind,
+  };
 }
 
 function splitToeflPage(page: RunnerPage, examType: ExamDisplayType): ToeflPage[] {
@@ -109,6 +119,46 @@ function splitToeflPage(page: RunnerPage, examType: ExamDisplayType): ToeflPage[
   return result;
 }
 
+export function withPartExampleIntros(pages: RunnerPage[]): ToeflPage[] {
+  const result: ToeflPage[] = [];
+  let partId = "";
+  for (const page of pages) {
+    const currentPart = page.part?.id ?? "";
+    if (currentPart && currentPart !== partId) {
+      partId = currentPart;
+      if (page.part && partExampleFilled(page.part.example)) {
+        result.push(introPage(page, "part"));
+      }
+    }
+    result.push(page);
+  }
+  return result;
+}
+
+export function withScopeIntroPages(pages: RunnerPage[]): ToeflPage[] {
+  const result: ToeflPage[] = [];
+  let sectionId = "";
+  let partId = "";
+  for (const page of pages) {
+    if (page.section.id !== sectionId) {
+      sectionId = page.section.id;
+      partId = "";
+      if (hasText(page.section.instructions) || hasAudio(page.section)) {
+        result.push(introPage(page, "section"));
+      }
+    }
+    const currentPart = page.part?.id ?? "";
+    if (currentPart && currentPart !== partId) {
+      partId = currentPart;
+      if (page.part) {
+        result.push(introPage(page, "part"));
+      }
+    }
+    result.push(page);
+  }
+  return result;
+}
+
 export function withIntroPages(pages: RunnerPage[], examType: ExamDisplayType): ToeflPage[] {
   const result: ToeflPage[] = [];
   let sectionId = "";
@@ -124,7 +174,7 @@ export function withIntroPages(pages: RunnerPage[], examType: ExamDisplayType): 
     const currentPart = page.part?.id ?? "";
     if (currentPart && currentPart !== partId) {
       partId = currentPart;
-      if (page.part && (hasText(page.part.instructions) || hasAudio(page.part))) {
+      if (page.part) {
         result.push(introPage(page, "part"));
       }
     }

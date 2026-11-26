@@ -49,6 +49,10 @@ public class SectionPart {
     @Column(name = "auto_advance_on_timeout")
     private Boolean autoAdvanceOnTimeout;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "example")
+    private JsonNode example;
+
     public UUID getId() {
         return id;
     }
@@ -127,5 +131,13 @@ public class SectionPart {
 
     public void setAutoAdvanceOnTimeout(Boolean autoAdvanceOnTimeout) {
         this.autoAdvanceOnTimeout = autoAdvanceOnTimeout;
+    }
+
+    public JsonNode getExample() {
+        return example;
+    }
+
+    public void setExample(JsonNode example) {
+        this.example = example;
     }
 }

@@ -12,7 +12,4 @@ public final class NotificationEvents {
 
     public record PasswordChanged(UUID userId) {
     }
-
-    public record LoginSucceeded(UUID userId, String userAgent) {
-    }
 }

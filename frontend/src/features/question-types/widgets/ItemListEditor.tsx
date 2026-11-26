@@ -20,6 +20,7 @@ type ItemListEditorProps<T extends Item> = {
   create?: () => T;
   extra?: (item: T, index: number) => ReactNode;
   aside?: (item: T, index: number) => ReactNode;
+  requiredMarker?: boolean;
 };
 
 export function ItemListEditor<T extends Item>({
@@ -36,7 +37,9 @@ export function ItemListEditor<T extends Item>({
   create,
   extra,
   aside,
+  requiredMarker,
 }: ItemListEditorProps<T>) {
+  const showRequiredMarker = requiredMarker ?? min > 0;
   const update = (index: number, text: string) => onChange(items.map((item, current) => (current === index ? { ...item, text } : item)));
   const canAdd = max === undefined || items.length < max;
   const add = () => {
@@ -50,7 +53,7 @@ export function ItemListEditor<T extends Item>({
     <Stack gap="sm" component="fieldset" style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <Input.Label component="legend" style={{ padding: 0 }}>
         {label}
-        {min > 0 ? (
+        {showRequiredMarker ? (
           <span aria-hidden style={{ color: "var(--mantine-color-error)", marginInlineStart: 4 }}>
             *
           </span>

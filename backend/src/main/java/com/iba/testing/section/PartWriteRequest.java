@@ -10,6 +10,7 @@ public record PartWriteRequest(
         Integer timeLimitMinutes,
         Integer timeLimitSeconds,
         Boolean oneQuestionPerPage,
-        JsonNode items
+        JsonNode items,
+        JsonNode example
 ) {
 }

@@ -76,6 +76,16 @@ class QuestionEnginesTest {
     }
 
     @Test
+    void choicePublicationAllowsEmptyOptionText() {
+        ObjectNode question = template(QuestionType.SINGLE_CHOICE);
+        for (JsonNode option : question.path("options")) {
+            ((ObjectNode) option).put("text", "");
+        }
+        engines.validate(draft(question), ContentCheck.publication("TOEIC"));
+        engines.validate(draft(question), ContentCheck.publication("TOEFL"));
+    }
+
+    @Test
     void toeflSpeakingWithoutMaxSecondsCanPublish() {
         ObjectNode question = template(QuestionType.SPEAKING_RECORDING);
         ((ObjectNode) question.path("settings")).remove("maxSeconds");

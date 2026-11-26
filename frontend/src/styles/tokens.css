@@ -103,11 +103,13 @@
   --block-gap: var(--space-12);
   --attempt-review-panel-height: 28rem;
   --runner-toefl-chrome-bg: #103677;
-  --runner-toefl-card-max: 1120px;
+  --runner-toefl-card-max: 1300px;
   --runner-toefl-centered-pane-max: 680px;
   --runner-toefl-demo-nav-min: 12rem;
   --runner-task-media-width: 640px;
   --runner-task-media-height: 480px;
   --runner-task-pad-x: var(--space-24);
   --runner-task-pad-y: var(--space-24);
+  --runner-toeic-group-pad-x: var(--space-8);
+  --runner-toeic-column-gap: 18px;
 }

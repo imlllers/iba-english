@@ -10,8 +10,7 @@ type CountdownProps = {
   onDark?: boolean;
 };
 
-export function Countdown({ label, seconds, digitsOnly = false, calm = false, onDark = false }: CountdownProps) {
-  const low = !calm && !onDark && seconds <= 300;
+export function Countdown({ label, seconds, digitsOnly = false, onDark = false }: CountdownProps) {
   const clock = formatClock(Math.max(0, seconds));
 
   if (digitsOnly) {
@@ -22,7 +21,7 @@ export function Countdown({ label, seconds, digitsOnly = false, calm = false, on
         aria-live={seconds <= 60 ? "polite" : "off"}
         aria-label={label ? `${label} ${clock}` : clock}
         fw={700}
-        c={low ? "red" : onDark ? undefined : "dimmed"}
+        c={onDark ? undefined : "dimmed"}
         style={{
           fontSize: 18,
           lineHeight: "26px",
@@ -42,14 +41,11 @@ export function Countdown({ label, seconds, digitsOnly = false, calm = false, on
       wrap="nowrap"
       role="timer"
       aria-live={seconds <= 60 ? "polite" : "off"}
-      c={low ? "red" : "dimmed"}
-      px={low ? 8 : 0}
-      py={low ? 2 : 0}
-      style={low ? { border: "1px solid var(--mantine-color-red-6)", borderRadius: "var(--mantine-radius-sm)" } : undefined}
+      c="dimmed"
     >
       <Icon name="clock" />
       {label ? <Text size="sm" span>{label}</Text> : null}
-      <Text size="sm" fw={700} c={low ? "red" : undefined} span style={{ fontVariantNumeric: "tabular-nums" }}>
+      <Text size="sm" fw={700} span style={{ fontVariantNumeric: "tabular-nums" }}>
         {clock}
       </Text>
     </Group>

@@ -3,7 +3,15 @@ import type { PublicQuestion } from "@/entities/question/types";
 import type { MaterialBlock, PublicSection } from "@/entities/test/types";
 import { buildRunnerPages } from "../../runnerPages";
 import { pageGateAudios } from "../../pageAudioGate";
-import { blockHasAudio, blockHasVisualMedia, excludeBlockAudioFromGate, withIntroPages } from "./toeflPages";
+import {
+  blockHasAudio,
+  blockHasVisualMedia,
+  excludeBlockAudioFromGate,
+  withIntroPages,
+  withPartExampleIntros,
+  withScopeIntroPages,
+} from "./toeflPages";
+import type { PartExample } from "@/entities/test/types";
 
 function question(id: string, blockId?: string | null): PublicQuestion {
   return {
@@ -123,5 +131,74 @@ describe("blockHasAudio", () => {
   it("detects audio in block items", () => {
     expect(blockHasAudio(block("x", true))).toBe(true);
     expect(blockHasAudio(block("x", false))).toBe(false);
+  });
+});
+
+describe("withPartExampleIntros", () => {
+  it("adds part intro only when example is filled", () => {
+    const example: PartExample = {
+      blocks: [
+        {
+          id: "t1",
+          kind: "text",
+          doc: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Ex" }] }] },
+        },
+      ],
+    };
+    const section: PublicSection = {
+      id: "s1",
+      title: "Listening",
+      instructions: "",
+      orderIndex: 0,
+      sectionType: "LISTENING",
+      timeLimitMinutes: null,
+      parts: [
+        {
+          id: "p1",
+          title: "Part 1",
+          instructions: "",
+          orderIndex: 0,
+          oneQuestionPerPage: true,
+          example,
+        },
+      ],
+      questions: [
+        { ...question("q1"), partId: "p1" },
+      ],
+    };
+    const base = buildRunnerPages([section], { oneQuestionPerPage: true, examType: "CUSTOM" });
+    const pages = withPartExampleIntros(base);
+    expect(pages.some((page) => page.intro === "part")).toBe(true);
+  });
+});
+
+describe("withScopeIntroPages", () => {
+  it("adds part intro even when part has no instructions", () => {
+    const section: PublicSection = {
+      id: "s1",
+      title: "Listening",
+      instructions: "",
+      orderIndex: 0,
+      sectionType: "LISTENING",
+      timeLimitMinutes: null,
+      parts: [
+        {
+          id: "p1",
+          title: "Part 1",
+          instructions: "",
+          orderIndex: 0,
+          oneQuestionPerPage: true,
+        },
+      ],
+      questions: [
+        { ...question("q1"), partId: "p1" },
+      ],
+    };
+    const base = buildRunnerPages([section], { oneQuestionPerPage: true, examType: "TOEIC" });
+    const pages = withScopeIntroPages(base);
+    const partIntro = pages.find((page) => page.intro === "part");
+    expect(partIntro).toBeDefined();
+    expect(partIntro?.part?.title).toBe("Part 1");
+    expect(partIntro?.questions).toHaveLength(0);
   });
 });

@@ -10,6 +10,7 @@ import type { SectionInput } from "@/features/tests/testsApi";
 import { errorMessage } from "@/shared/api/client";
 import { Icon } from "@/shared/ui/Icon";
 import { Switch } from "@/shared/ui/Switch";
+import { SettingsSectionTitle } from "@/shared/ui/SettingsSectionTitle";
 import { MaterialLivePreview } from "./MaterialLivePreview";
 
 type SectionFormProps = {
@@ -129,53 +130,56 @@ export function SectionForm({
             </Tooltip>
           </Group>
           {error ? <Alert color="red" variant="light">{error}</Alert> : null}
-          <TextInput
-            label="Название секции"
-            withAsterisk
-            value={title}
-            maxLength={200}
-            placeholder="Введите название"
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              setTitle(value);
-              persist({ title: value });
-            }}
-          />
-          <InstructionsField
-            label="Инструкция к секции"
-            value={instructions}
-            onChange={(doc) => {
-              setInstructions(doc);
-              persist({ instructions: doc });
-            }}
-          />
+          <Stack gap="md" component="section" aria-label="Основные">
+            <SettingsSectionTitle>Основные</SettingsSectionTitle>
+            <TextInput
+              label="Название секции"
+              withAsterisk
+              value={title}
+              maxLength={200}
+              placeholder="Введите название"
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                setTitle(value);
+                persist({ title: value });
+              }}
+            />
+            <Switch
+              label="Можно возвращаться к заданиям в секции"
+              labelSize="sm"
+              checked={allowBackToQuestions}
+              onChange={(checked) => {
+                setAllowBackToQuestions(checked);
+                persist({ allowBackToQuestions: checked });
+              }}
+            />
+            <Switch
+              label="Можно возвращаться к частям в секции"
+              labelSize="sm"
+              checked={allowBackToPart}
+              onChange={(checked) => {
+                setAllowBackToPart(checked);
+                persist({ allowBackToPart: checked });
+              }}
+            />
+            <InstructionsField
+              label="Инструкция к секции"
+              value={instructions}
+              onChange={(doc) => {
+                setInstructions(doc);
+                persist({ instructions: doc });
+              }}
+            />
+          </Stack>
           <ContentFeedEditor
             title="Контент к секции"
+            titleSize="lg"
             items={items}
             onChange={(next) => {
               setItems(next);
               persist({ items: next });
             }}
           />
-              <Switch
-                label="Можно возвращаться к заданиям в секции"
-                labelSize="sm"
-                checked={allowBackToQuestions}
-                onChange={(checked) => {
-                  setAllowBackToQuestions(checked);
-                  persist({ allowBackToQuestions: checked });
-                }}
-              />
-              <Switch
-                label="Можно возвращаться к частям в секции"
-                labelSize="sm"
-                checked={allowBackToPart}
-                onChange={(checked) => {
-                  setAllowBackToPart(checked);
-                  persist({ allowBackToPart: checked });
-                }}
-              />
-
         </Stack>
       </Card>
       <MaterialLivePreview
@@ -185,6 +189,7 @@ export function SectionForm({
         items={items}
         examType={examType}
         previewScope="section"
+        sectionType={section.sectionType}
       />
     </Stack>
   );

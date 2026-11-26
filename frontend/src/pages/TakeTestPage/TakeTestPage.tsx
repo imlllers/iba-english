@@ -1,7 +1,6 @@
-import { Alert, Anchor } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import type { PublicTest } from "@/entities/test/types";
 import { MediaProvider, type MediaResolver } from "@/features/question-types/media/MediaContext";
 import { TestIntro } from "@/features/test-taking/TestIntro";
@@ -10,21 +9,33 @@ import { partLimitSeconds } from "@/features/test-taking/partTiming";
 import { limitSecondsFromSection } from "@/shared/lib/durationMmSs";
 import { attemptMediaUrl, publicApi } from "@/features/test-taking/publicApi";
 import { waitForSpeakingUploads } from "@/features/question-types/engines/speaking/speakingUploadQueue";
+import { attemptStorageKey } from "@/features/test-taking/attemptLeaveLock";
 import { useAnswerSaver } from "@/features/test-taking/useAnswerSaver";
 import { ApiError } from "@/shared/api/client";
 import { Loading } from "@/shared/ui/Loading";
 import { MessagePage } from "@/shared/ui/MessagePage";
 
-const attemptKey = (publicToken: string) => `iba-attempt:${publicToken}`;
-const resultKey = (publicToken: string) => `iba-result:${publicToken}`;
-
 type Running = { token: string; test: PublicTest; expiresAt: string | null; blockEndsAt: string | null };
+
+function withoutNullEnds(ends?: Record<string, string | null>) {
+  const next: Record<string, string | null> = {};
+  if (!ends) {
+    return next;
+  }
+  for (const [id, value] of Object.entries(ends)) {
+    if (value) {
+      next[id] = value;
+    }
+  }
+  return next;
+}
 
 export function TakeTestPage() {
   const { publicToken = "" } = useParams();
   const navigate = useNavigate();
   const [running, setRunning] = useState<Running | null>(null);
-  const [resuming, setResuming] = useState(() => Boolean(localStorage.getItem(attemptKey(publicToken))));
+  const storedAttemptKey = attemptStorageKey(publicToken);
+  const [resuming, setResuming] = useState(() => Boolean(localStorage.getItem(storedAttemptKey)));
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState("");
   const [sectionEnds, setSectionEnds] = useState<Record<string, string | null>>({});
@@ -41,7 +52,6 @@ export function TakeTestPage() {
   const partPauseKey = useRef(new Map<string, string>());
   const submitted = useRef(false);
   const token = running?.token ?? null;
-  const previous = localStorage.getItem(resultKey(publicToken));
 
   const intro = useQuery({
     queryKey: ["public-test", publicToken],
@@ -59,9 +69,8 @@ export function TakeTestPage() {
     setSubmitError("");
     try {
       await publicApi.submit(attemptToken);
-      localStorage.removeItem(attemptKey(publicToken));
+      localStorage.removeItem(storedAttemptKey);
       sessionStorage.removeItem(`iba-focus-loss:${attemptToken}`);
-      localStorage.setItem(resultKey(publicToken), attemptToken);
       navigate(`/attempt/${attemptToken}/result`, { replace: true });
     } catch (failure) {
       submitted.current = false;
@@ -69,7 +78,7 @@ export function TakeTestPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [navigate, publicToken]);
+  }, [navigate, storedAttemptKey]);
 
   const onFinal = useCallback((code: string) => {
     if (token && (code === "TIME_EXPIRED" || code === "ALREADY_SUBMITTED")) {
@@ -81,10 +90,10 @@ export function TakeTestPage() {
   const persistAnswers = useCallback(async () => {
     await waitForSpeakingUploads();
     return saver.flush();
-  }, [saver]);
+  }, [saver.flush]);
 
   useEffect(() => {
-    const stored = localStorage.getItem(attemptKey(publicToken));
+    const stored = localStorage.getItem(storedAttemptKey);
     if (!stored) {
       return;
     }
@@ -97,20 +106,26 @@ export function TakeTestPage() {
           expiresAt: attempt.expiresAt,
           blockEndsAt: attempt.blockEndsAt ?? null,
         });
+        const sections = withoutNullEnds(attempt.sectionEnds);
+        const parts = withoutNullEnds(attempt.partEnds);
+        const questions = withoutNullEnds(attempt.questionEnds);
+        setSectionEnds(sections);
+        setPartEnds(parts);
+        setQuestionEnds(questions);
+        Object.keys(sections).forEach((id) => entered.current.add(id));
+        Object.keys(parts).forEach((id) => enteredParts.current.add(id));
+        Object.keys(questions).forEach((id) => enteredQuestions.current.add(id));
         setAudioDone(attempt.audioDone ?? []);
         setReadingStarted(attempt.reading?.started ?? {});
         setReadingDone(attempt.reading?.done ?? []);
         setResuming(false);
       },
-      (failure: unknown) => {
-        localStorage.removeItem(attemptKey(publicToken));
-        if (failure instanceof ApiError && failure.code === "ALREADY_SUBMITTED") {
-          localStorage.setItem(resultKey(publicToken), stored);
-        }
+      () => {
+        localStorage.removeItem(storedAttemptKey);
         setResuming(false);
       },
     );
-  }, [publicToken]);
+  }, [storedAttemptKey]);
 
   const media = useMemo<MediaResolver | null>(() => token ? {
     asset: (id) => attemptMediaUrl(token, id),
@@ -206,12 +221,33 @@ export function TakeTestPage() {
     }
   }, [running]);
 
+  const onPersistReadingStart = useCallback((questionId: string) => {
+    if (!token) {
+      return;
+    }
+    setReadingStarted((prev) => {
+      if (prev[questionId]) {
+        return prev;
+      }
+      return { ...prev, [questionId]: new Date().toISOString() };
+    });
+    void publicApi.markReadingStart(token, questionId);
+  }, [token]);
+
+  const onPersistReadingDone = useCallback((questionId: string) => {
+    if (!token) {
+      return;
+    }
+    setReadingDone((prev) => (prev.includes(questionId) ? prev : [...prev, questionId]));
+    void publicApi.markReadingDone(token, questionId);
+  }, [token]);
+
   const start = async (name: string, email: string) => {
     setStarting(true);
     setStartError("");
     try {
       const attempt = await publicApi.start(publicToken, name, email);
-      localStorage.setItem(attemptKey(publicToken), attempt.attemptToken);
+      localStorage.setItem(storedAttemptKey, attempt.attemptToken);
       saver.setAnswers({});
       setRunning({
         token: attempt.attemptToken,
@@ -260,18 +296,8 @@ export function TakeTestPage() {
           }}
           initialReadingStarted={readingStarted}
           initialReadingDone={readingDone}
-          onPersistReadingStart={(questionId) => {
-            if (readingStarted[questionId]) {
-              return;
-            }
-            const stamp = new Date().toISOString();
-            setReadingStarted((prev) => ({ ...prev, [questionId]: stamp }));
-            void publicApi.markReadingStart(running.token, questionId);
-          }}
-          onPersistReadingDone={(questionId) => {
-            setReadingDone((prev) => (prev.includes(questionId) ? prev : [...prev, questionId]));
-            void publicApi.markReadingDone(running.token, questionId);
-          }}
+          onPersistReadingStart={onPersistReadingStart}
+          onPersistReadingDone={onPersistReadingDone}
           onExpire={() => void persistAnswers().finally(() => void submit(running.token))}
           onFocusLossExhausted={() => void persistAnswers().finally(() => void submit(running.token))}
           flushAnswers={persistAnswers}
@@ -305,12 +331,6 @@ export function TakeTestPage() {
       starting={starting}
       error={startError}
       onStart={(name, email) => void start(name, email)}
-      notice={previous ? (
-        <Alert variant="light">
-          You have already submitted this test in this browser.{" "}
-          <Anchor component={Link} to={`/attempt/${previous}/result`}>View result</Anchor>
-        </Alert>
-      ) : undefined}
     />
   );
 }

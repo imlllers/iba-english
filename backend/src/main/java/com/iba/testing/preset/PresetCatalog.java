@@ -10,7 +10,7 @@ import java.util.Map;
 public class PresetCatalog {
 
     public List<ExamPreset> all() {
-        return List.of(ielts(), toefl(), toeic());
+        return List.of(ielts(), toefl(), toeic(), toeicSw());
     }
 
     public ExamPreset find(String id) {
@@ -73,19 +73,14 @@ public class PresetCatalog {
     }
 
     private ExamPreset toeic() {
-        Map<String, Object> settings = baseSettings("TOEIC", "test", true, true, true, false, true, true);
-        settings.put("showResultToParticipant", true);
-        settings.put("resultDetail", "score_only");
-        settings.put("focusLossMaxWarnings", 2);
-        settings.put("allowEarlySubmit", true);
-        settings.put("requireParticipantName", true);
-        settings.put("requireParticipantEmail", true);
+        Map<String, Object> settings = toeicBaseSettings();
+        settings.put("autoAdvanceOnQuestionTimeout", true);
         return new ExamPreset(
                 "TOEIC",
-                "TOEIC",
+                "TOEIC Listening & Reading",
                 "TOEIC",
                 List.of(
-                        section("Listening Section", "LISTENING", 45, false, false, List.of(
+                        section("Listening Section", "LISTENING", null, false, false, List.of(
                                 part("Part 1: Photographs", true),
                                 part("Part 2: Question-Response", true),
                                 part("Part 3: Conversations", false),
@@ -93,10 +88,40 @@ public class PresetCatalog {
                         section("Reading Section", "READING", 75, true, true, List.of(
                                 part("Part 5: Incomplete Sentences", true),
                                 part("Part 6: Text Completion", false),
-                                part("Part 7: Reading Comprehension", false))),
-                        section("Speaking Section", "SPEAKING", 20, false, false, List.of()),
-                        section("Writing Section", "WRITING", 60, false, false, List.of())),
+                                part("Part 7: Reading Comprehension", false)))),
                 settings);
+    }
+
+    private ExamPreset toeicSw() {
+        Map<String, Object> settings = toeicBaseSettings();
+        settings.put("questionNumberScope", "section");
+        return new ExamPreset(
+                "TOEIC_SW",
+                "TOEIC Speaking & Writing",
+                "TOEIC",
+                List.of(
+                        section("Speaking Section", "SPEAKING", 20, false, false, List.of(
+                                part("Questions 1-2: Read a Text Aloud", true),
+                                part("Questions 3-4: Describe a Picture", true),
+                                part("Questions 5-7: Respond to Questions", true),
+                                part("Questions 8-10: Respond to Questions Using Information Provided", true),
+                                part("Question 11: Express an Opinion", true))),
+                        section("Writing Section", "WRITING", 60, false, false, List.of(
+                                part("Questions 1-5: Write a Sentence Based on a Picture", true),
+                                part("Questions 6-7: Respond to a Written Request", true),
+                                part("Question 8: Write an Opinion Essay", true)))),
+                settings);
+    }
+
+    private Map<String, Object> toeicBaseSettings() {
+        Map<String, Object> settings = baseSettings("TOEIC", "test", true, true, true, false, true, true);
+        settings.put("showResultToParticipant", true);
+        settings.put("resultDetail", "score_and_scale");
+        settings.put("focusLossMaxWarnings", 2);
+        settings.put("allowEarlySubmit", true);
+        settings.put("requireParticipantName", true);
+        settings.put("requireParticipantEmail", true);
+        return settings;
     }
 
     private PresetSection section(

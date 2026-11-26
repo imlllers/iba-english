@@ -43,7 +43,6 @@ export const SETTINGS_SEARCH_ITEMS: SettingsSearchItem[] = [
   { id: "notif-closing", label: "Тест скоро закроется", keywords: ["дата окончания", "срок"], section: "notifications", anchor: "notif-tests", teacherOnly: true },
   { id: "notif-closed", label: "Тест закрылся", keywords: ["итоги", "срок"], section: "notifications", anchor: "notif-tests", teacherOnly: true },
   { id: "notif-password", label: "Пароль изменён", keywords: ["безопасность", "уведомление"], section: "notifications", anchor: "notif-account", teacherOnly: true },
-  { id: "notif-device", label: "Вход с нового устройства", keywords: ["безопасность", "браузер"], section: "notifications", anchor: "notif-account", teacherOnly: true },
 
   { id: "platform", label: "Настройки платформы", keywords: ["платформа", "общие"], section: "platform", anchor: "platform-general", adminOnly: true },
   { id: "platform-upload", label: "Размер файлов", keywords: ["лимит", "загрузка", "мб", "аудио", "изображение", "видео", "запись голоса"], section: "platform", anchor: "platform-general", adminOnly: true },

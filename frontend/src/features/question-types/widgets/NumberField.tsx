@@ -13,6 +13,34 @@ type NumberFieldProps = {
   size?: "sm" | "md";
 };
 
+function parseNumberInput(
+  next: string | number | undefined | null,
+  step: number,
+): number | undefined | null {
+  if (next === "" || next === undefined || next === null) {
+    return undefined;
+  }
+  let parsed = typeof next === "number" ? next : Number(next);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  if (step >= 1) {
+    parsed = Math.round(parsed);
+  }
+  return parsed;
+}
+
+function clampInRange(value: number, min: number | undefined, max: number | undefined) {
+  let parsed = value;
+  if (max !== undefined && parsed > max) {
+    parsed = max;
+  }
+  if (min !== undefined && parsed < min) {
+    parsed = min;
+  }
+  return parsed;
+}
+
 export function NumberField({
   label,
   value,
@@ -25,6 +53,8 @@ export function NumberField({
   withAsterisk,
   size,
 }: NumberFieldProps) {
+  const hasBounds = max !== undefined || min !== undefined;
+
   return (
     <NumberInput
       size={size}
@@ -35,29 +65,29 @@ export function NumberField({
       min={min}
       max={max}
       step={step}
-      clampBehavior={max !== undefined || min !== undefined ? "strict" : undefined}
+      clampBehavior={hasBounds ? "blur" : undefined}
       decimalScale={step < 1 ? 2 : 0}
       allowNegative={min < 0}
       placeholder={placeholder}
       onChange={(next) => {
-        if (next === "" || next === undefined || next === null) {
+        const parsed = parseNumberInput(next, step);
+        if (parsed === null) {
+          return;
+        }
+        if (parsed === undefined) {
           onChange(undefined);
           return;
         }
-        let parsed = typeof next === "number" ? next : Number(next);
-        if (!Number.isFinite(parsed)) {
+        onChange(parsed);
+      }}
+      onBlur={() => {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
           return;
         }
-        if (step >= 1) {
-          parsed = Math.round(parsed);
+        const clamped = clampInRange(value, min, max);
+        if (clamped !== value) {
+          onChange(clamped);
         }
-        if (max !== undefined && parsed > max) {
-          parsed = max;
-        }
-        if (min !== undefined && parsed < min) {
-          parsed = min;
-        }
-        onChange(parsed);
       }}
     />
   );

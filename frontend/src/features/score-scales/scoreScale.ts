@@ -39,6 +39,7 @@ const BUILTIN_EXAM_TYPES: Record<string, ExamDisplayType> = {
   ielts: "IELTS",
   toefl: "TOEFL",
   toeic: "TOEIC",
+  toeic_sw: "TOEIC",
 };
 
 export function scaleExamType(scale: ScoreScale): ExamDisplayType {

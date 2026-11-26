@@ -100,6 +100,7 @@ export type JudgementOptions = { statements: Item[] };
 export type BlankKind = "gap" | "tail" | "dropdown";
 export type InlineOptions = {
   choices?: Record<string, Item[]>;
+  sharedDropdownChoices?: boolean;
   prefixes?: Record<string, string>;
   tailLengths?: Record<string, number>;
 };

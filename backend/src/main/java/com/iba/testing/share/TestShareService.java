@@ -107,7 +107,7 @@ public class TestShareService {
     public ObjectNode preview(UUID recipientId, UUID shareId) {
         TestShare share = requirePending(recipientId, shareId);
         ExamTest snapshot = share.getSnapshotTest();
-        return views.publicView(views.snapshot(snapshot), snapshot.getSettings());
+        return views.publicView(views.snapshot(snapshot), snapshot.getSettings(), snapshot.getExamPreset());
     }
 
     @Transactional(readOnly = true)

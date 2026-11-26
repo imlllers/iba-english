@@ -75,7 +75,10 @@ public class PublicAttemptService {
     public ObjectNode publishedTest(String publicToken) {
         Published published = requirePublished(publicToken);
         ensureAvailable(published.version().getSettingsSnapshot());
-        return views.publicView(published.version().getContentSnapshot(), published.version().getSettingsSnapshot());
+        return views.publicView(
+                published.version().getContentSnapshot(),
+                published.version().getSettingsSnapshot(),
+                published.test().getExamPreset());
     }
 
     @Transactional
@@ -127,7 +130,10 @@ public class PublicAttemptService {
             response.put("expiresAt", attempt.getExpiresAt().toString());
         }
         response.putNull("blockEndsAt");
-        response.set("test", views.publicView(published.version().getContentSnapshot(), settings));
+        response.set("test", views.publicView(
+                published.version().getContentSnapshot(),
+                settings,
+                published.test().getExamPreset()));
         putAudioDone(response, attempt);
         putReadingProgress(response, attempt);
         return response;
@@ -298,10 +304,10 @@ public class PublicAttemptService {
         JsonNode question = requireQuestion(attempt, questionId);
         String questionKey = questionId.toString();
         boolean firstStart = !attempt.getProgress().path("questions").hasNonNull(questionKey);
-        if (firstStart && isToeflFamily(attempt)) {
+        if (firstStart) {
             JsonNode section = findSectionForQuestion(attempt, question);
-            if (section != null) {
-                closePriorListeningQuestions(attempt, section, questionKey);
+            if (section != null && usesListeningClosePolicy(attempt, section)) {
+                closePriorListeningQuestions(attempt, section, questionKey, question);
             }
         }
         ObjectNode node = mapper.createObjectNode();
@@ -310,7 +316,9 @@ public class PublicAttemptService {
             node.putNull("endsAt");
             return node;
         }
-        OffsetDateTime started = progressStart(attempt, "questions", questionKey);
+        JsonNode section = findSectionForQuestion(attempt, question);
+        String examType = attempt.getTestVersion().getSettingsSnapshot().path("examType").asText("");
+        OffsetDateTime started = syncedQuestionStart(attempt, section, question, questionKey, examType);
         node.put("endsAt", questionDeadline(attempt, started, limit).toString());
         return node;
     }
@@ -492,7 +500,11 @@ public class PublicAttemptService {
             node.put("expiresAt", attempt.getExpiresAt().toString());
         }
         putBlockEndsAt(node, attempt);
-        node.set("test", views.publicView(attempt.getTestVersion().getContentSnapshot(), attempt.getTestVersion().getSettingsSnapshot()));
+        putTimerEnds(node, attempt);
+        node.set("test", views.publicView(
+                attempt.getTestVersion().getContentSnapshot(),
+                attempt.getTestVersion().getSettingsSnapshot(),
+                attempt.getTestVersion().getTest().getExamPreset()));
         var saved = node.putArray("answers");
         for (Answer answer : answers.findByAttempt(attempt)) {
             ObjectNode item = saved.addObject();
@@ -502,6 +514,54 @@ public class PublicAttemptService {
         putAudioDone(node, attempt);
         putReadingProgress(node, attempt);
         return node;
+    }
+
+    private void putTimerEnds(ObjectNode node, TestAttempt attempt) {
+        ObjectNode sectionEnds = node.putObject("sectionEnds");
+        ObjectNode partEnds = node.putObject("partEnds");
+        ObjectNode questionEnds = node.putObject("questionEnds");
+        JsonNode snapshot = attempt.getTestVersion().getContentSnapshot();
+        JsonNode progress = attempt.getProgress();
+        if (snapshot == null || progress == null) {
+            return;
+        }
+        for (JsonNode section : snapshot.path("sections")) {
+            String sectionId = section.path("id").asText("");
+            JsonNode sectionStarted = progress.path("sections").path(sectionId);
+            int sectionLimit = SectionTiming.limitSeconds(section);
+            if (sectionLimit > 0 && sectionStarted.isTextual() && !sectionStarted.asText().isBlank()) {
+                try {
+                    sectionEnds.put(
+                            sectionId,
+                            OffsetDateTime.parse(sectionStarted.asText()).plusSeconds(sectionLimit).toString());
+                } catch (RuntimeException ignored) {
+                }
+            }
+            for (JsonNode part : section.path("parts")) {
+                String partId = part.path("id").asText("");
+                JsonNode partStarted = progress.path("parts").path(partId);
+                int partLimit = PartTiming.limitSeconds(part);
+                if (partLimit > 0 && partStarted.isTextual() && !partStarted.asText().isBlank()) {
+                    try {
+                        OffsetDateTime started = OffsetDateTime.parse(partStarted.asText());
+                        partEnds.put(partId, partDeadline(attempt, started, partLimit, partId).toString());
+                    } catch (RuntimeException ignored) {
+                    }
+                }
+            }
+            for (JsonNode question : section.path("questions")) {
+                String questionId = question.path("id").asText("");
+                JsonNode questionStarted = progress.path("questions").path(questionId);
+                int limit = questionLimit(attempt, question);
+                if (limit > 0 && questionStarted.isTextual() && !questionStarted.asText().isBlank()) {
+                    try {
+                        OffsetDateTime started = OffsetDateTime.parse(questionStarted.asText());
+                        questionEnds.put(questionId, questionDeadline(attempt, started, limit).toString());
+                    } catch (RuntimeException ignored) {
+                    }
+                }
+            }
+        }
     }
 
     private void putAudioDone(ObjectNode response, TestAttempt attempt) {
@@ -783,7 +843,9 @@ public class PublicAttemptService {
     }
 
     private int questionLimit(TestAttempt attempt, JsonNode question) {
-        return ListeningTiming.questionLimit(question);
+        String examType = attempt.getTestVersion().getSettingsSnapshot().path("examType").asText("");
+        JsonNode section = findSectionForQuestion(attempt, question);
+        return ListeningTiming.questionLimit(examType, section, question);
     }
 
     private void ensureQuestionOpen(TestAttempt attempt, JsonNode question) {
@@ -806,8 +868,53 @@ public class PublicAttemptService {
         return "TOEFL".equals(attempt.getTestVersion().getSettingsSnapshot().path("examType").asText(""));
     }
 
+    private boolean usesListeningClosePolicy(TestAttempt attempt, JsonNode section) {
+        if (!"LISTENING".equals(section.path("sectionType").asText(""))) {
+            return false;
+        }
+        String examType = attempt.getTestVersion().getSettingsSnapshot().path("examType").asText("");
+        return "TOEFL".equals(examType) || "TOEIC".equals(examType);
+    }
+
+    private OffsetDateTime syncedQuestionStart(
+            TestAttempt attempt, JsonNode section, JsonNode question, String questionKey, String examType) {
+        String blockId = question.path("materialBlockId").asText("");
+        if (!"TOEIC".equals(examType) || blockId.isBlank() || section == null) {
+            return progressStart(attempt, "questions", questionKey);
+        }
+        JsonNode started = attempt.getProgress().path("questions");
+        for (JsonNode item : section.path("questions")) {
+            if (!blockId.equals(item.path("materialBlockId").asText(""))) {
+                continue;
+            }
+            String siblingId = item.path("id").asText();
+            if (started.hasNonNull(siblingId)) {
+                OffsetDateTime existing = OffsetDateTime.parse(started.path(siblingId).asText());
+                if (!started.hasNonNull(questionKey)) {
+                    ObjectNode progress = attempt.getProgress().deepCopy();
+                    progress.withObjectProperty("questions").put(questionKey, existing.toString());
+                    attempt.setProgress(progress);
+                }
+                return existing;
+            }
+        }
+        return progressStart(attempt, "questions", questionKey);
+    }
+
+    private boolean usesClosedAnswerPolicy(TestAttempt attempt, JsonNode question) {
+        String examType = attempt.getTestVersion().getSettingsSnapshot().path("examType").asText("");
+        if ("TOEFL".equals(examType)) {
+            return true;
+        }
+        if ("TOEIC".equals(examType)) {
+            JsonNode section = findSectionForQuestion(attempt, question);
+            return section != null && "LISTENING".equals(section.path("sectionType").asText(""));
+        }
+        return false;
+    }
+
     private void ensureToeflAnswerAllowed(TestAttempt attempt, JsonNode question) {
-        if (!isToeflFamily(attempt)) {
+        if (!usesClosedAnswerPolicy(attempt, question)) {
             return;
         }
         String partId = question.path("partId").asText("");
@@ -851,10 +958,11 @@ public class PublicAttemptService {
         attempt.setProgress(progress);
     }
 
-    private void closePriorListeningQuestions(TestAttempt attempt, JsonNode section, String activeQuestionId) {
+    private void closePriorListeningQuestions(TestAttempt attempt, JsonNode section, String activeQuestionId, JsonNode activeQuestion) {
         if (!"LISTENING".equals(section.path("sectionType").asText(""))) {
             return;
         }
+        String activeBlock = activeQuestion.path("materialBlockId").asText("");
         ObjectNode progress = attempt.getProgress().deepCopy();
         JsonNode started = progress.path("questions");
         ArrayNode closed = progress.has("closedQuestions") && progress.get("closedQuestions").isArray()
@@ -865,9 +973,13 @@ public class PublicAttemptService {
             if (questionId.equals(activeQuestionId)) {
                 break;
             }
-            if (started.hasNonNull(questionId) && !progressContains(closed, questionId)) {
-                closed.add(questionId);
+            if (!started.hasNonNull(questionId) || progressContains(closed, questionId)) {
+                continue;
             }
+            if (!activeBlock.isBlank() && activeBlock.equals(item.path("materialBlockId").asText(""))) {
+                continue;
+            }
+            closed.add(questionId);
         }
         progress.set("closedQuestions", closed);
         attempt.setProgress(progress);

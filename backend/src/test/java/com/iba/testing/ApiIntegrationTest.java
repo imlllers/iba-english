@@ -888,17 +888,12 @@ class ApiIntegrationTest {
     }
 
     @Test
-    void adminDoesNotGetPasswordOrDeviceNotifications() throws Exception {
+    void adminDoesNotGetPasswordNotification() throws Exception {
         try {
             mvc.perform(json(post("/api/auth/password"), admin, "{\"currentPassword\":\"admin-password\",\"newPassword\":\"admin-new-password1\"}"))
                     .andExpect(status().isOk());
             admin = login("admin@test.local", "admin-new-password1");
-            mvc.perform(json(post("/api/auth/login"), null,
-                            "{\"email\":\"admin@test.local\",\"password\":\"admin-new-password1\",\"adminSecret\":\"test-admin-secret\"}")
-                            .header("User-Agent", "IntegrationTest/NewDevice"))
-                    .andExpect(status().isOk());
             awaitNotificationAbsent(admin, "PASSWORD_CHANGED", 3_000);
-            awaitNotificationAbsent(admin, "NEW_DEVICE_LOGIN", 3_000);
         } finally {
             admin = login("admin@test.local", "admin-new-password1");
             mvc.perform(json(post("/api/auth/password"), admin, "{\"currentPassword\":\"admin-new-password1\",\"newPassword\":\"admin-password\"}"))

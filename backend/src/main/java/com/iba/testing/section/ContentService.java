@@ -127,6 +127,15 @@ public class ContentService {
             ContentCheck.draft().contentItems(request.items(), "items");
             part.setItems(request.items());
         }
+        if (RequestFields.present(body, "example")) {
+            JsonNode example = request.example();
+            if (example == null || example.isNull()) {
+                part.setExample(null);
+            } else {
+                ContentCheck.draft().partExample(example, "example");
+                part.setExample(example);
+            }
+        }
         touch(test);
         return tests.detail(test);
     }

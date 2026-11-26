@@ -38,6 +38,8 @@ export type ScaleResult = {
   title: string;
   complete: boolean;
   total: number | null;
+  totalMax?: number | null;
+  hasLevels?: boolean;
   level: string | null;
   sections: ScaleResultSection[];
 };
@@ -98,6 +100,12 @@ export type ParticipantResult = {
   scale?: ScaleResult;
 };
 
+export type AttemptTimerEnds = {
+  sectionEnds?: Record<string, string | null>;
+  partEnds?: Record<string, string | null>;
+  questionEnds?: Record<string, string | null>;
+};
+
 export type StartedAttempt = {
   attemptToken: string;
   status: AttemptStatus;
@@ -106,7 +114,7 @@ export type StartedAttempt = {
   audioDone?: string[];
   reading?: { started?: Record<string, string>; done?: string[] };
   test: PublicTest;
-};
+} & AttemptTimerEnds;
 
 export type ResumedAttempt = {
   status: AttemptStatus;
@@ -116,4 +124,4 @@ export type ResumedAttempt = {
   reading?: { started?: Record<string, string>; done?: string[] };
   test: PublicTest;
   answers: { questionId: string; answerData: AnswerData }[];
-};
+} & AttemptTimerEnds;

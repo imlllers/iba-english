@@ -31,6 +31,7 @@ type ContentFeedEditorProps = {
   prompt?: PromptOptions;
   promptRequired?: boolean;
   beforeItems?: ReactNode;
+  addActions?: ReactNode;
 };
 
 export function ContentFeedEditor({
@@ -41,6 +42,7 @@ export function ContentFeedEditor({
   prompt,
   promptRequired = true,
   beforeItems,
+  addActions,
 }: ContentFeedEditorProps) {
   const media = useMedia();
   const [picking, setPicking] = useState<ContentItem | null>(null);
@@ -50,13 +52,6 @@ export function ContentFeedEditor({
   const replace = (id: string, patch: Partial<ContentItem>) =>
     onChange(items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
 
-  const move = (index: number, shift: number) => {
-    const next = [...items];
-    const [item] = next.splice(index, 1);
-    next.splice(index + shift, 0, item);
-    onChange(next);
-  };
-
   const add = (kind: ContentKind) => {
     onChange([...items, createItem(kind)]);
   };
@@ -64,10 +59,10 @@ export function ContentFeedEditor({
   return (
     <Stack gap="md" component="section" aria-label={title || "Контент"}>
       {title ? (
-        titleSize === "lg" ? <SettingsSectionTitle>{title}</SettingsSectionTitle> : <Text size={titleSize} fw={700}>{title}</Text>
+        titleSize === "lg" ? <SettingsSectionTitle>{title}</SettingsSectionTitle> : <Text size={titleSize} fw={600}>{title}</Text>
       ) : null}
       {beforeItems}
-      {items.map((item, index) => (
+      {items.map((item) => (
         <Stack key={item.id} gap="xs">
           <Group justify="space-between" gap="md" wrap="nowrap">
             <Text size="sm" fw={600}>
@@ -78,17 +73,9 @@ export function ContentFeedEditor({
                 </span>
               ) : null}
             </Text>
-            <Group gap="md" wrap="nowrap">
-              <IconButton label="Выше" disabled={index === 0} onClick={() => move(index, -1)}>
-                <Icon name="up" />
-              </IconButton>
-              <IconButton label="Ниже" disabled={index === items.length - 1} onClick={() => move(index, 1)}>
-                <Icon name="down" />
-              </IconButton>
-              <IconButton color="red" label="Удалить" onClick={() => setRemoving(item)}>
-                <Icon name="trash" />
-              </IconButton>
-            </Group>
+            <IconButton color="red" label="Удалить" onClick={() => setRemoving(item)}>
+              <Icon name="trash" />
+            </IconButton>
           </Group>
           {item.kind === "text" ? (
             <RichTextEditor
@@ -149,6 +136,7 @@ export function ContentFeedEditor({
             {CONTENT_LABELS[kind]}
           </Button>
         ))}
+        {addActions}
       </Group>
       <MediaPicker
         open={picking !== null}

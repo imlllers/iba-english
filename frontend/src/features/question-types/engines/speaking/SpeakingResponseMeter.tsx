@@ -9,24 +9,31 @@ const MIC_SIZE = 20;
 type SpeakingResponseMeterProps = {
   remainingSeconds: number;
   totalSeconds: number;
+  label?: string;
+  icon?: "mic" | "book";
 };
 
-export function SpeakingResponseMeter({ remainingSeconds, totalSeconds }: SpeakingResponseMeterProps) {
+export function SpeakingResponseMeter({
+  remainingSeconds,
+  totalSeconds,
+  label = "Response Time",
+  icon = "mic",
+}: SpeakingResponseMeterProps) {
   const safeTotal = Math.max(1, totalSeconds);
   const remaining = Math.max(0, Math.floor(remainingSeconds));
   const ratio = Math.min(1, remaining / safeTotal);
   const radius = (METER_SIZE - STROKE) / 2;
   const circumference = 2 * Math.PI * radius;
   const dash = circumference * ratio;
-  const urgent = remaining <= 5;
+  const announceRemaining = remaining <= 5;
 
   return (
     <Box
       px="md"
       py="sm"
       role="timer"
-      aria-live={urgent ? "polite" : "off"}
-      aria-label={`Response Time ${formatClock(remaining)}`}
+      aria-live={announceRemaining ? "polite" : "off"}
+      aria-label={`${label} ${formatClock(remaining)}`}
       style={{
         width: "fit-content",
         marginInline: "auto",
@@ -42,7 +49,7 @@ export function SpeakingResponseMeter({ remainingSeconds, totalSeconds }: Speaki
             color: "var(--color-text)",
           }}
         >
-          Response Time
+          {label}
         </Text>
         <Group gap="md" wrap="nowrap" align="center" justify="center">
           <Box
@@ -73,7 +80,7 @@ export function SpeakingResponseMeter({ remainingSeconds, totalSeconds }: Speaki
                 cy={METER_SIZE / 2}
                 r={radius}
                 fill="none"
-                stroke={urgent ? "var(--color-error)" : "var(--color-primary)"}
+                stroke="var(--color-primary)"
                 strokeWidth={STROKE}
                 strokeDasharray={circumference}
                 strokeDashoffset={circumference - dash}
@@ -88,21 +95,20 @@ export function SpeakingResponseMeter({ remainingSeconds, totalSeconds }: Speaki
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: urgent ? "var(--color-error)" : "var(--color-primary)",
+                color: "var(--color-primary)",
               }}
             >
-              <Icon name="mic" size={MIC_SIZE} />
+              <Icon name={icon} size={MIC_SIZE} />
             </Box>
           </Box>
           <Text
             fw={700}
-            c={urgent ? "red" : undefined}
             style={{
               fontVariantNumeric: "tabular-nums",
               fontSize: "var(--type-h6-size)",
               lineHeight: "var(--type-h6-line)",
               minWidth: "5.5ch",
-              color: urgent ? undefined : "var(--color-text)",
+              color: "var(--color-text)",
             }}
           >
             {formatClock(remaining)}

@@ -40,12 +40,14 @@ export function TestIntro({ test, starting, error, notice, onStart }: TestIntroP
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const isToefl = test.settings.examType === "TOEFL";
+  const examType = test.settings.examType;
+  const stackedIntro = examType === "TOEFL" || examType === "TOEIC";
+  const runnerLayout = examType === "TOEIC" ? "toeic" : examType === "TOEFL" ? "toefl" : null;
   const needName = true;
   const needEmail = test.settings.requireParticipantEmail !== false;
-  const firstNameError = isToefl && needName && submitted && !firstName.trim() ? "Enter your first name" : undefined;
-  const lastNameError = isToefl && needName && submitted && !lastName.trim() ? "Enter your last name" : undefined;
-  const nameError = !isToefl && needName && submitted && !fullName.trim() ? "Enter your first and last name" : undefined;
+  const firstNameError = stackedIntro && needName && submitted && !firstName.trim() ? "Enter your first name" : undefined;
+  const lastNameError = stackedIntro && needName && submitted && !lastName.trim() ? "Enter your last name" : undefined;
+  const nameError = !stackedIntro && needName && submitted && !fullName.trim() ? "Enter your first and last name" : undefined;
   const emailError = needEmail && submitted
     ? (!email.trim() ? "Enter your email" : !emailLooksValid(email.trim()) ? "Enter a valid email" : undefined)
     : undefined;
@@ -56,7 +58,7 @@ export function TestIntro({ test, starting, error, notice, onStart }: TestIntroP
   const [compactToeflIntro, setCompactToeflIntro] = useState(false);
 
   useLayoutEffect(() => {
-    if (!isToefl) {
+    if (!stackedIntro) {
       return;
     }
     const card = introCardRef.current;
@@ -78,7 +80,7 @@ export function TestIntro({ test, starting, error, notice, onStart }: TestIntroP
       observer.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [isToefl, test.title, test.description, notice, needEmail, focusLimit, error, starting]);
+  }, [stackedIntro, test.title, test.description, notice, needEmail, focusLimit, error, starting]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -93,7 +95,7 @@ export function TestIntro({ test, starting, error, notice, onStart }: TestIntroP
     onStart(name, email.trim());
   };
 
-  const nameFields = isToefl ? (
+  const nameFields = stackedIntro ? (
     <Group gap="md" grow align="flex-start" wrap="wrap">
       <TextInput
         label="First name"
@@ -183,7 +185,7 @@ export function TestIntro({ test, starting, error, notice, onStart }: TestIntroP
     </>
   );
 
-  const formBody = isToefl ? (
+  const formBody = stackedIntro ? (
     <Stack gap="xl" w="100%">
       {toeflSectionTitle}
       <Box maw="var(--runner-toefl-centered-pane-max)" mx="auto" w="100%">
@@ -203,10 +205,10 @@ export function TestIntro({ test, starting, error, notice, onStart }: TestIntroP
     </Stack>
   );
 
-  if (isToefl) {
+  if (stackedIntro && runnerLayout) {
     return (
       <Box
-        data-runner-layout="toefl"
+        data-runner-layout={runnerLayout}
         style={{
           minHeight: "100vh",
           height: "100vh",

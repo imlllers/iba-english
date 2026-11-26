@@ -1,12 +1,16 @@
 import type { ReactNode } from "react";
 import { Box, SimpleGrid, Stack } from "@mantine/core";
+import type { ExamDisplayType } from "@/entities/test/types";
 import type { ScaleResult, ScaleResultSection } from "@/entities/attempt/types";
 import { formatNumber } from "@/features/score-scales/scoreScale";
 import classes from "./ParticipantScoreDisplay.module.css";
 
 const SECTION_ORDER = ["Reading", "Listening", "Writing", "Speaking"];
 
-function sortSections(sections: ScaleResultSection[]): ScaleResultSection[] {
+function sortSections(sections: ScaleResultSection[], examType?: ExamDisplayType): ScaleResultSection[] {
+  if (examType === "TOEIC") {
+    return [...sections].sort((a, b) => a.index - b.index);
+  }
   return [...sections].sort((a, b) => {
     const ai = SECTION_ORDER.indexOf(a.name);
     const bi = SECTION_ORDER.indexOf(b.name);
@@ -86,7 +90,7 @@ export function ParticipantOverallScore({
 }
 
 function ScoreArc({ value, max }: { value: number; max: number }) {
-  const radius = 64;
+  const radius = 76;
   const cx = 100;
   const cy = 100;
   const track = `M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`;
@@ -135,6 +139,7 @@ function SectionCard({ section }: { section: ScaleResultSection }) {
 
 type ParticipantScoreDisplayProps = {
   scale: ScaleResult;
+  examType?: ExamDisplayType;
   rawScore?: number | null;
   rawMaxScore?: number | null;
   hideOverall?: boolean;
@@ -142,14 +147,15 @@ type ParticipantScoreDisplayProps = {
 
 export function ParticipantScoreDisplay({
   scale,
+  examType,
   rawScore,
   rawMaxScore,
   hideOverall = false,
 }: ParticipantScoreDisplayProps) {
-  const sections = sortSections(scale.sections);
-  const scaleMax = sectionScaleMax(sections);
+  const sections = sortSections(scale.sections, examType);
+  const scaleMax = scale.totalMax ?? sectionScaleMax(sections);
   const rawTotals = sumRawScores(sections);
-  const showOverall = !hideOverall && scale.total !== null && scaleMax !== null;
+  const showOverall = !hideOverall && scale.total !== null && scaleMax != null && scaleMax > 0;
   const secondary =
     rawTotals !== null
       ? scoreOfLabel(rawTotals.raw, rawTotals.rawMax)

@@ -1,7 +1,7 @@
-import { ActionIcon, Badge, Box, Button, NavLink, ScrollArea, Stack, Text } from "@mantine/core";
-import { useEffect, useState, type CSSProperties, type DragEvent } from "react";
+import { ActionIcon, Box, Button, NavLink, ScrollArea, Stack, Text } from "@mantine/core";
+import { useEffect, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import type { Question } from "@/entities/question/types";
-import type { ExamTest, MaterialBlock, Section } from "@/entities/test/types";
+import type { ExamTest, MaterialBlock, Section, SectionPart } from "@/entities/test/types";
 import { formatQuestionRange, numberQuestionsByScope, totalSlots } from "@/features/question-types/numbering";
 import { typeLabel } from "@/features/question-types/registry";
 import { formatAnswerKey } from "@/features/test-settings/formatAnswerKey";
@@ -12,7 +12,6 @@ import type { BuilderWorkspace } from "./BuilderBar";
 import {
   outlineOfScope,
   questionsOfBlock,
-  questionsOfPart,
   sectionParts,
   type OutlineItem,
 } from "./sectionParts";
@@ -221,6 +220,83 @@ function QuestionRow({
   );
 }
 
+function PartNode({
+  section,
+  part,
+  activePart,
+  current,
+  partId,
+  blockId,
+  questionId,
+  dropTarget,
+  onSelectPart,
+  onDragOverPart,
+  onDropOnPart,
+  children,
+}: {
+  section: Section;
+  part: SectionPart;
+  activePart: boolean;
+  current: boolean;
+  partId: string | undefined;
+  blockId: string | undefined;
+  questionId: string | undefined;
+  dropTarget: boolean;
+  onSelectPart: (sectionId: string, partId: string) => void;
+  onDragOverPart: (section: Section, partId: string, event: DragEvent) => void;
+  onDropOnPart: (section: Section, partId: string, event: DragEvent) => void;
+  children: ReactNode;
+}) {
+  const hasCurrent = current && partId === part.id && Boolean(blockId || questionId);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (hasCurrent || dropTarget || activePart) {
+      setOpen(true);
+    }
+  }, [hasCurrent, dropTarget, activePart]);
+
+  return (
+    <div>
+      <div
+        style={dropWrapStyle({ target: dropTarget })}
+        onDragOver={(event) => onDragOverPart(section, part.id, event)}
+        onDrop={(event) => onDropOnPart(section, part.id, event)}
+      >
+        <NavLink
+          {...sidebarNavLinkProps}
+          active={activePart}
+          label={part.title}
+          rightSection={
+            <ActionIcon
+              size="sm"
+              variant="subtle"
+              color="gray"
+              c="white"
+              aria-label={open ? "Свернуть часть" : "Развернуть часть"}
+              aria-expanded={open}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setOpen((value) => !value);
+              }}
+            >
+              <Icon name={open ? "down" : "chevron"} size={14} />
+            </ActionIcon>
+          }
+          styles={{ ...sidebarNavLinkProps.styles, label: { fontWeight: 600 } }}
+          onClick={() => onSelectPart(section.id, part.id)}
+        />
+      </div>
+      {open ? (
+        <Stack gap={0} pl="sm">
+          {children}
+        </Stack>
+      ) : null}
+    </div>
+  );
+}
+
 function BlockNode({
   section,
   block,
@@ -261,7 +337,7 @@ function BlockNode({
   const items = questionsOfBlock(section, block.id);
   const dropTarget = dropBlockId === block.id;
   const hasCurrent = items.some((item) => item.id === questionId);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     if (hasCurrent || dropTarget) {
@@ -676,35 +752,24 @@ export function SectionsPanel({
                 />
                 <Stack gap={0} pl="sm">
                   {parts.length === 0 && renderOutlineScope(section, null, current)}
-                  {parts.map((part) => {
-                    const activePart = current && partId === part.id && !blockId && !questionId;
-                    const partDropTarget = dropPartId === part.id;
-                    return (
-                      <div key={part.id}>
-                        <div
-                          style={dropWrapStyle({ target: partDropTarget })}
-                          onDragOver={(event) => onDragOverPart(section, part.id, event)}
-                          onDrop={(event) => onDropOnPart(section, part.id, event)}
-                        >
-                          <NavLink
-                            {...sidebarNavLinkProps}
-                            active={activePart}
-                            label={part.title}
-                            rightSection={
-                              <Badge size="xs" variant="outline" color="gray">
-                                {totalSlots(questionsOfPart(section, part.id), examType)}
-                              </Badge>
-                            }
-                            styles={{ ...sidebarNavLinkProps.styles, label: { fontWeight: 600 } }}
-                            onClick={() => onSelectPart(section.id, part.id)}
-                          />
-                        </div>
-                        <Stack gap={0} pl="sm">
-                          {renderOutlineScope(section, part.id, current)}
-                        </Stack>
-                      </div>
-                    );
-                  })}
+                  {parts.map((part) => (
+                    <PartNode
+                      key={part.id}
+                      section={section}
+                      part={part}
+                      activePart={current && partId === part.id && !blockId && !questionId}
+                      current={current}
+                      partId={partId}
+                      blockId={blockId}
+                      questionId={questionId}
+                      dropTarget={dropPartId === part.id}
+                      onSelectPart={onSelectPart}
+                      onDragOverPart={onDragOverPart}
+                      onDropOnPart={onDropOnPart}
+                    >
+                      {renderOutlineScope(section, part.id, current)}
+                    </PartNode>
+                  ))}
                 </Stack>
               </div>
             );

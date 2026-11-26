@@ -64,6 +64,7 @@ class ScoreScaleServiceBuiltinTest {
   void builtinToeic() {
     JsonNode scale = service.starterCopy("toeic");
     assertNotNull(scale);
+    assertEquals("TOEIC Listening & Reading", scale.path("title").asText());
     assertEquals("sum", scale.path("aggregate").asText());
     assertEquals(2, scale.path("sections").size());
     for (JsonNode level : scale.path("levels")) {
@@ -81,5 +82,23 @@ class ScoreScaleServiceBuiltinTest {
       }
     }
     assertTrue(hasA1);
+  }
+
+  @Test
+  void builtinToeicSw() {
+    JsonNode scale = service.starterCopy("toeic_sw");
+    assertNotNull(scale);
+    assertEquals("TOEIC", scale.path("examType").asText());
+    assertEquals("sum", scale.path("aggregate").asText());
+    assertEquals(2, scale.path("sections").size());
+    assertEquals("SPEAKING", scale.path("sections").get(0).path("sectionType").asText());
+    assertEquals("WRITING", scale.path("sections").get(1).path("sectionType").asText());
+    for (int i = 0; i < 2; i++) {
+      assertEquals(0, scale.path("sections").get(i).path("min").asDouble(), 1e-9);
+      assertEquals(200, scale.path("sections").get(i).path("max").asDouble(), 1e-9);
+      assertEquals(10, scale.path("sections").get(i).path("step").asDouble(), 1e-9);
+      assertEquals("manual", scale.path("sections").get(i).path("convert").path("method").asText());
+    }
+    assertTrue(scale.path("levels").isEmpty());
   }
 }

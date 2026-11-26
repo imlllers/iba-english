@@ -2,6 +2,7 @@ import { Stack, Text, Title } from "@mantine/core";
 import type { ParticipantResult } from "@/entities/attempt/types";
 import type { ExamDisplayType, ResultDetail } from "@/entities/test/types";
 import { normalizeResultDetail, resultShowsScaleSections } from "@/entities/test/resultDisplay";
+import { usesStackedTakeChrome } from "@/features/test-taking/layouts/runnerLayout";
 import { ParticipantOverallScore, ParticipantScoreDisplay } from "@/features/results/ParticipantScoreDisplay";
 
 type ParticipantLiveResultBodyProps = {
@@ -23,13 +24,10 @@ function liveOverallNumbers(
   maxScore: number | null | undefined,
 ): { value: number; max: number | null; level: string | null; scaleTitle?: string } | null {
   if (scale?.total != null) {
-    const sections = scale.sections;
-    const uniformMax = sections.length && sections.every((s) => s.max === sections[0].max)
-      ? sections[0].max
-      : sections[0]?.max ?? null;
+    const gaugeMax = scale.totalMax ?? scale.sections[0]?.max ?? null;
     return {
       value: scale.total,
-      max: uniformMax,
+      max: gaugeMax,
       level: scale.level,
       scaleTitle: scale.title,
     };
@@ -67,7 +65,7 @@ export function ParticipantLiveResultBody({
   return (
     <Stack gap="md" align="center" ta="center" w="100%">
       <Stack gap="sm" align="center" w="100%">
-        {examType === "TOEFL" ? (
+        {usesStackedTakeChrome(examType) ? (
           <Text
             fw={700}
             style={{ fontSize: "var(--type-h5-size)", lineHeight: "var(--type-h5-line)" }}
@@ -100,6 +98,7 @@ export function ParticipantLiveResultBody({
       {showScaleBreakdown && scale ? (
         <ParticipantScoreDisplay
           scale={scale}
+          examType={examType}
           rawScore={score}
           rawMaxScore={maxScore}
           hideOverall={ieltsSpeakingSeparate || detail === "sections_only"}

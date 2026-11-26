@@ -61,6 +61,7 @@ export function ChoiceContent({ question, update, examType = "CUSTOM" }: EditorP
       label="Варианты ответа"
       items={options}
       min={2}
+      requiredMarker={false}
       multiline={long}
       addLabel="Добавить вариант"
       placeholder="Введите текст варианта"
