@@ -1,0 +1,1 @@
+ALTER TABLE section_parts ADD COLUMN IF NOT EXISTS example jsonb;

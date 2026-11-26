@@ -90,7 +90,7 @@ export function ParticipantOverallScore({
 }
 
 function ScoreArc({ value, max }: { value: number; max: number }) {
-  const radius = 64;
+  const radius = 76;
   const cx = 100;
   const cy = 100;
   const track = `M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`;

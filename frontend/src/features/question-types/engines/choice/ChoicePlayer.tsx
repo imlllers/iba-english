@@ -3,7 +3,13 @@ import type { Item } from "@/entities/question/types";
 import { letter } from "@/shared/lib/format";
 import type { PlayerProps } from "../types";
 
-export function ChoicePlayer({ question, answer, onAnswer, readOnly, parenLetters = false }: PlayerProps) {
+export function ChoicePlayer({
+  question,
+  answer,
+  onAnswer,
+  readOnly,
+  parenLetters = false,
+}: PlayerProps) {
   const options: Item[] = Array.isArray(question.options) ? question.options : [];
   const multiple = question.type === "MULTIPLE_SELECT";
   const selected = multiple ? ((answer.optionIds as string[]) ?? []) : [String(answer.optionId ?? "")];
@@ -34,19 +40,35 @@ export function ChoicePlayer({ question, answer, onAnswer, readOnly, parenLetter
     onAnswer({ optionIds: options.map((option) => option.id).filter((value) => next.includes(value)) });
   };
 
-  const label = (index: number, text: string) => (
-    <>
-      <Text component="span" fw={parenLetters ? 500 : 700} mr="xs">
-        {parenLetters ? `(${letter(index)})` : letter(index)}
-      </Text>
-      <Text component="span" fw={500}>{text}</Text>
-    </>
-  );
+  const marker = (index: number) => {
+    const ch = letter(index);
+    if (parenLetters) {
+      return { text: `(${ch})`, fw: 500 as const };
+    }
+    return { text: ch, fw: 700 as const };
+  };
+
+  const label = (index: number, text: string) => {
+    const { text: prefix, fw } = marker(index);
+    return (
+      <>
+        <Text component="span" fw={fw} mr="xs">
+          {prefix}
+        </Text>
+        <Text component="span" fw={500}>{text}</Text>
+      </>
+    );
+  };
 
   return (
     <Stack gap="xs" component="fieldset" style={{ border: 0, margin: 0, padding: 0 }}>
       <Text component="legend" className="sr-only">Options</Text>
-      <Stack gap="xs" component="ul" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+      <Stack
+        gap="xs"
+        component="ul"
+        className="iba-choice-list"
+        style={{ listStyle: "none", margin: 0, padding: 0 }}
+      >
         {options.map((option, index) => {
           const checked = selected.includes(option.id);
           return (

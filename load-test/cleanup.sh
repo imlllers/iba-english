@@ -17,13 +17,7 @@ begin;
 delete from tests where title like 'Нагрузка – %';
 
 delete from notifications n
-where n.body like 'Нагрузка %'
-   or (n.type = 'NEW_DEVICE_LOGIN' and exists (
-         select 1 from known_devices d
-         where d.user_id = n.user_id
-           and d.fingerprint = encode(sha256('iba-load-test'::bytea), 'hex')
-           and n.created_at >= d.created_at));
-delete from known_devices where fingerprint = encode(sha256('iba-load-test'::bytea), 'hex');
+where n.body like 'Нагрузка %';
 
 with load_users as (select id from users where email like 'load-%@example.com')
 delete from tests where owner_id in (select id from load_users);

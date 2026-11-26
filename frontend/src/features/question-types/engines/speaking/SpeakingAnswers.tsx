@@ -7,8 +7,17 @@ export function SpeakingAnswers({ question, update, part = "body" }: EditorProps
   if (part === "score") {
     return <ManualScoring question={question} update={update} />;
   }
-  const set = (field: "maxSeconds" | "preparationSeconds" | "readingSeconds", value: number | undefined, fallback: number) =>
+  const set = (field: "preparationSeconds" | "readingSeconds", value: number | undefined, fallback: number) =>
     update({ settings: { ...question.settings, [field]: value ?? fallback } });
+  const setMaxSeconds = (value: number | undefined) => {
+    const settings = { ...question.settings };
+    if (value === undefined) {
+      delete settings.maxSeconds;
+    } else {
+      settings.maxSeconds = value;
+    }
+    update({ settings });
+  };
   return (
     <Stack gap="md">
       <NumberField
@@ -25,7 +34,7 @@ export function SpeakingAnswers({ question, update, part = "body" }: EditorProps
             value={question.settings.maxSeconds}
             min={10}
             max={600}
-            onChange={(value) => set("maxSeconds", value, 120)}
+            onChange={setMaxSeconds}
           />
         </Box>
         <Box style={{ flex: 1, minWidth: 0 }}>

@@ -7,13 +7,14 @@ describe("speakingRecordLimitSeconds", () => {
     expect(speakingRecordLimitSeconds(45, "IELTS")).toBe(45);
   });
 
-  it("gives TOEFL no fallback when unset", () => {
+  it("gives TOEFL and TOEIC no fallback when unset", () => {
     expect(speakingRecordLimitSeconds(undefined, "TOEFL")).toBeUndefined();
+    expect(speakingRecordLimitSeconds(undefined, "TOEIC")).toBeUndefined();
     expect(speakingRecordLimitSeconds(null, "TOEFL")).toBeUndefined();
     expect(speakingRecordLimitSeconds(0, "TOEFL")).toBeUndefined();
   });
 
-  it("keeps 120 sec fallback for non-TOEFL", () => {
+  it("keeps 120 sec fallback for other exam types", () => {
     expect(speakingRecordLimitSeconds(undefined, "IELTS")).toBe(120);
     expect(speakingRecordLimitSeconds(undefined, "CUSTOM")).toBe(120);
   });

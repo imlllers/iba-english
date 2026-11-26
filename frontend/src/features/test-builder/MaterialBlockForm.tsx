@@ -1,7 +1,7 @@
 import { ActionIcon, Alert, Badge, Card, Group, Stack, Tooltip } from "@mantine/core";
 import { useEffect, useRef, useState } from "react";
 import type { Doc, Question } from "@/entities/question/types";
-import type { ExamDisplayType, MaterialBlock, QuestionNumberFormat } from "@/entities/test/types";
+import type { ExamDisplayType, MaterialBlock, QuestionNumberFormat, SectionType } from "@/entities/test/types";
 import { ContentFeedEditor } from "@/features/question-types/content/ContentFeedEditor";
 import { blockItems } from "@/features/question-types/content/contentItems";
 import { serializeInstructionDoc, toInstructionDoc } from "@/features/question-types/content/instructionDoc";
@@ -23,6 +23,7 @@ type MaterialBlockFormProps = {
   linkedQuestions?: LinkedPreviewQuestion[];
   numberFormat?: QuestionNumberFormat;
   examType?: ExamDisplayType;
+  sectionType?: SectionType | null;
   onActivate?: () => void;
   onSave: (input: MaterialBlockInput) => Promise<void>;
   onDelete: () => void;
@@ -35,6 +36,7 @@ export function MaterialBlockForm({
   linkedQuestions = [],
   numberFormat = "1",
   examType = "CUSTOM",
+  sectionType = null,
   onActivate,
   onSave,
   onDelete,
@@ -103,12 +105,13 @@ export function MaterialBlockForm({
       </Card>
       <MaterialLivePreview
         ariaLabel="Превью группы вопросов для участника"
-        title={examType === "TOEFL" ? undefined : questionsHeading || undefined}
+        title={examType === "TOEFL" || examType === "TOEIC" ? undefined : questionsHeading || undefined}
         instructions={instructions}
         items={items}
         questions={linkedQuestions}
         numberFormat={numberFormat}
         examType={examType}
+        sectionType={sectionType}
       />
     </Stack>
   );

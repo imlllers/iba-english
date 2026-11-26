@@ -7,3 +7,11 @@ export function runnerLayoutOf(examType: ExamDisplayType | null | undefined): Ru
   if (examType === "TOEFL") return "toefl";
   return "ielts";
 }
+
+export function usesStackedTakeChrome(examType: ExamDisplayType | null | undefined): boolean {
+  return examType === "TOEFL" || examType === "TOEIC";
+}
+
+export function stackedLayoutOf(examType: ExamDisplayType | null | undefined): "toefl" | "toeic" {
+  return examType === "TOEIC" ? "toeic" : "toefl";
+}

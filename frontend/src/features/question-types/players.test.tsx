@@ -76,6 +76,20 @@ describe("question players", () => {
     expect(onAnswer).toHaveBeenCalledWith({ optionId: "b" });
   });
 
+  it("TOEIC single choice labels options as (A) (B)", () => {
+    renderPlayer(
+      <QuestionPlayer
+        examType="TOEIC"
+        question={question("SINGLE_CHOICE", [{ id: "a", text: "one" }, { id: "b", text: "two" }])}
+        kicker="1"
+        answer={{}}
+        onAnswer={() => undefined}
+      />,
+    );
+    expect(screen.getByText("(A)")).toBeTruthy();
+    expect(screen.getByText("(B)")).toBeTruthy();
+  });
+
   it("multiple select keeps option order", () => {
     const onAnswer = vi.fn();
     const options = [{ id: "a", text: "one" }, { id: "b", text: "two" }, { id: "c", text: "three" }];

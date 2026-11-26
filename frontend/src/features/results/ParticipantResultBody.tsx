@@ -8,6 +8,7 @@ import { normalizeResultDetail, resultShowsOverall, resultShowsScaleSections } f
 import { ScaleResultView } from "@/features/score-scales/ScaleResultView";
 import { formatNumber } from "@/features/score-scales/scoreScale";
 import { formatScore } from "@/shared/lib/format";
+import { usesStackedTakeChrome } from "@/features/test-taking/layouts/runnerLayout";
 import { SettingsHint } from "@/shared/ui/SettingsHint";
 
 function ParticipantScaleOverall({
@@ -75,7 +76,7 @@ export function ParticipantResultBody({
         <SettingsHint ta="center">{previewNote}</SettingsHint>
       ) : null}
       <Stack gap="sm" align="center" ta="center">
-        {examType === "TOEFL" ? (
+        {usesStackedTakeChrome(examType) ? (
           <Text
             fw={700}
             style={{ fontSize: "var(--type-h5-size)", lineHeight: "var(--type-h5-line)" }}

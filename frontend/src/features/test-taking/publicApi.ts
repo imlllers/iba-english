@@ -46,7 +46,8 @@ export const publicApi = {
     api<{ endsAt: string | null }>(`/api/public/attempts/${attemptToken}/questions/${questionId}/start`, json("POST")),
   markAudioDone: (attemptToken: string, key: string) =>
     api<{ saved: boolean }>(`/api/public/attempts/${attemptToken}/audio-done`, json("POST", { key })),
-  submit: (attemptToken: string) => api<ParticipantResult>(`/api/public/attempts/${attemptToken}/submit`, json("POST")),
+  submit: (attemptToken: string, init?: RequestInit) =>
+    api<ParticipantResult>(`/api/public/attempts/${attemptToken}/submit`, { ...json("POST"), ...init }),
   result: (attemptToken: string) => api<ParticipantResult>(`/api/public/attempts/${attemptToken}/result`),
   uploadRecording: (attemptToken: string, file: Blob, name: string) =>
     api<{ id: string }>(`/api/public/attempts/${attemptToken}/media`, formData(file, name)),

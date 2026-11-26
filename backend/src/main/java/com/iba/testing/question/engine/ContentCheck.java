@@ -16,6 +16,7 @@ public final class ContentCheck {
     private static final int MAX_TEXT = 5000;
     private static final int MAX_CONTENT_ITEMS = 30;
     private static final Set<String> CONTENT_KINDS = Set.of("text", "audio", "video", "image");
+    private static final Set<String> EXAMPLE_BLOCK_KINDS = Set.of("text", "image", "audio", "choices");
     private static final Pattern MEDIA_ID = Pattern.compile("^$|^[0-9a-fA-F-]{36}$");
 
     private final boolean strict;
@@ -81,6 +82,10 @@ public final class ContentCheck {
     }
 
     public Set<String> items(JsonNode array, String field, String label, int min) {
+        return items(array, field, label, min, true);
+    }
+
+    public Set<String> items(JsonNode array, String field, String label, int min, boolean requireItemText) {
         shape(array != null && array.isArray(), field, label + ": ожидается список");
         shape(array.size() <= MAX_ITEMS, field, label + ": слишком много элементов");
         Set<String> ids = new LinkedHashSet<>();
@@ -91,11 +96,13 @@ public final class ContentCheck {
             shape(!id.isBlank() && id.length() <= 100, field, label + ": у элемента нет идентификатора");
             shape(ids.add(id), field, label + ": идентификаторы повторяются");
             text(item.get("text"), field, label);
-            if (item.path("text").asText("").isBlank()) {
+            if (requireItemText && item.path("text").asText("").isBlank()) {
                 filled = false;
             }
         }
-        complete(filled, field, label + ": заполните текст каждого элемента");
+        if (requireItemText) {
+            complete(filled, field, label + ": заполните текст каждого элемента");
+        }
         complete(ids.size() >= min, field, label + ": нужно минимум " + min);
         return ids;
     }
@@ -110,6 +117,43 @@ public final class ContentCheck {
             any = any || !value.asText().isBlank();
         }
         complete(any, field, message);
+    }
+
+    public void partExample(JsonNode value, String field) {
+        shape(value.isObject(), field, "Пример: ожидается объект");
+        JsonNode blocks = value.path("blocks");
+        shape(blocks.isArray(), field, "Пример: ожидается список блоков");
+        shape(blocks.size() <= MAX_CONTENT_ITEMS, field, "Пример: слишком много блоков");
+        Set<String> ids = new LinkedHashSet<>();
+        for (JsonNode block : blocks) {
+            shape(block.isObject(), field, "Пример: некорректный блок");
+            String id = block.path("id").asText("");
+            shape(!id.isBlank() && id.length() <= 100 && ids.add(id), field, "Пример: некорректный идентификатор");
+            String kind = block.path("kind").asText("");
+            shape(EXAMPLE_BLOCK_KINDS.contains(kind), field, "Пример: неизвестный тип блока");
+            if ("text".equals(kind)) {
+                JsonNode doc = block.path("doc");
+                shape(doc.isMissingNode() || (doc.isObject() && "doc".equals(doc.path("type").asText())),
+                        field, "Пример: текст должен быть документом редактора");
+            } else if ("image".equals(kind) || "audio".equals(kind)) {
+                JsonNode media = block.path("mediaId");
+                shape(media.isMissingNode() || media.isNull() || (media.isTextual() && MEDIA_ID.matcher(media.asText()).matches()),
+                        field, "Пример: некорректный файл");
+            } else if ("choices".equals(kind)) {
+                JsonNode options = block.path("options");
+                shape(options.isArray(), field, "Пример: ожидается список вариантов");
+                shape(options.size() >= 2 && options.size() <= 4, field, "Пример: нужно от 2 до 4 вариантов");
+                Set<String> optionIds = new LinkedHashSet<>();
+                for (JsonNode option : options) {
+                    shape(option.isObject(), field, "Пример: некорректный вариант");
+                    String optionId = option.path("id").asText("");
+                    shape(!optionId.isBlank() && optionIds.add(optionId), field, "Пример: некорректный идентификатор варианта");
+                    text(option.get("text"), field, "Пример");
+                }
+                String correctId = block.path("correctId").asText("");
+                shape(!correctId.isBlank() && optionIds.contains(correctId), field, "Пример: укажите правильный вариант");
+            }
+        }
     }
 
     public void contentItems(JsonNode array, String field) {

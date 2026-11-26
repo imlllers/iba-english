@@ -106,6 +106,7 @@ public class TestCopyService {
                 partCopy.setTimeLimitSeconds(part.getTimeLimitSeconds());
                 partCopy.setOneQuestionPerPage(part.getOneQuestionPerPage());
                 partCopy.setAutoAdvanceOnTimeout(part.getAutoAdvanceOnTimeout());
+                partCopy.setExample(remapJson(part.getExample(), mediaMap, clearSourceIds));
                 partCopy.setOrderIndex(part.getOrderIndex());
                 parts.save(partCopy);
                 partIds.put(part.getId(), partCopy.getId());
@@ -207,6 +208,7 @@ public class TestCopyService {
             collectFromJson(section.getItems(), ids);
             for (SectionPart part : parts.findBySectionOrderByOrderIndexAsc(section)) {
                 collectFromJson(part.getItems(), ids);
+                collectFromJson(part.getExample(), ids);
             }
             for (MaterialBlock block : blocks.findBySectionOrderByOrderIndexAsc(section)) {
                 collectFromJson(block.getContent(), ids);

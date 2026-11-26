@@ -8,6 +8,7 @@ import type { GapAdjacentAffix } from "../../prompt/gapAdjacentInlines";
 import { PromptView } from "../../prompt/PromptView";
 import { gapInputStyles, gapNumberStyle, gapSelectStyles } from "../gapStyles";
 import type { PlayerProps } from "../types";
+import { inlineDropdownChoiceItems } from "./sharedDropdownChoices";
 
 function focusBlankControl(root: HTMLElement, id: string, place: "start" | "end") {
   const wrap = root.querySelector(`[data-gap-blank="${CSS.escape(id)}"]`);
@@ -228,7 +229,7 @@ export function InlinePlayer({
             onChange={(next) => set(id, next)}
             options={[
               { value: "", label: "–" },
-              ...(options.choices?.[id] ?? []).map((choice) => ({ value: choice.id, label: choice.text })),
+              ...inlineDropdownChoiceItems(options, id).map((choice) => ({ value: choice.id, label: choice.text })),
             ]}
           />
           {after ? <span>{after}</span> : null}

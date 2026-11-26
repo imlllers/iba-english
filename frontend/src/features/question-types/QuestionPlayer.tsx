@@ -5,7 +5,7 @@ import { ENGINES } from "./engines";
 import { ContentFeedView, type ExamAudioBinding } from "./content/ContentFeedView";
 import { contentItemFilled, questionItems, promptItemId } from "./content/contentItems";
 import { instructionHasContent, toInstructionDoc } from "./content/instructionDoc";
-import { docIsOnlyTable, passageFrameStyle } from "./content/passageFrame";
+import { docIsOnlyTable, docWithoutTables, docWithTablesOnly, passageFrameStyle } from "./content/passageFrame";
 import { useMedia } from "./media/MediaContext";
 import { ownQuestionsHeading, questionSlotCount } from "./numbering";
 import { PromptView } from "./prompt/PromptView";
@@ -34,12 +34,16 @@ type QuestionPlayerProps = {
   showWordCountToggle?: boolean;
   onToggleWordCount?: () => void;
   speakingAutoFlow?: boolean;
+  speakingPreviewStatic?: boolean;
   speakingPromptReady?: boolean;
+  speakingReadingRemaining?: number;
   onSpeakingComplete?: () => void;
   autoPlayTaskVideo?: boolean;
   listeningContentGate?: boolean;
   teacherReview?: boolean;
   demoMode?: boolean;
+  toeicGroupPane?: boolean;
+  questionBlockHeading?: string;
 };
 
 export function QuestionPlayer({
@@ -52,10 +56,10 @@ export function QuestionPlayer({
   numberFormat = "1",
   examType = "CUSTOM",
   examAudio,
-  hideQuestionsHeading = examType === "TOEFL",
+  hideQuestionsHeading = examType === "TOEFL" || examType === "TOEIC",
   hideAnswer = false,
   hideBlankNumbers = examType === "TOEFL",
-  parenLetters = examType === "TOEFL",
+  parenLetters = examType === "TOEFL" || examType === "TOEIC",
   headingBelowInstructions = examType === "TOEFL",
   plainPrompt = examType === "TOEFL" && engineOf(question.type) === "WRITTEN",
   hideInstructions = false,
@@ -64,12 +68,16 @@ export function QuestionPlayer({
   showWordCountToggle = false,
   onToggleWordCount,
   speakingAutoFlow = false,
+  speakingPreviewStatic = false,
   speakingPromptReady = true,
+  speakingReadingRemaining,
   onSpeakingComplete,
   autoPlayTaskVideo = false,
   listeningContentGate = false,
   teacherReview = false,
   demoMode = false,
+  toeicGroupPane = false,
+  questionBlockHeading,
 }: QuestionPlayerProps) {
   const ui = ENGINES[engineOf(question.type)];
   const Player = ui.Player;
@@ -81,8 +89,25 @@ export function QuestionPlayer({
   const sharedPassage = question.type === "GAPPED_TEXT" || question.type === "TEXT_ERRORS";
   const slotCount = questionSlotCount(question, examType);
   const multiSelectRange = question.type === "MULTIPLE_SELECT" && slotCount > 1;
+  const speakingQuestion = engineOf(question.type) === "SPEAKING";
+  const stackedSpeakingExam = examType === "TOEFL" || examType === "TOEIC";
+  const stackedSpeakingTask = stackedSpeakingExam && speakingQuestion && speakingAutoFlow && !teacherReview;
+  const hasVisualTaskMedia = items.some(
+    (item) => (item.kind === "image" || item.kind === "video") && contentItemFilled(item),
+  );
+  const toeicTaskWithBlockHeading = examType === "TOEIC"
+    && !teacherReview
+    && !toeicGroupPane
+    && Boolean(questionBlockHeading);
+  const writtenQuestion = engineOf(question.type) === "WRITTEN";
+  const toeicPictureTaskStack = toeicTaskWithBlockHeading
+    && !speakingQuestion
+    && hasVisualTaskMedia;
+  const toeicWritingVisualSplit = toeicPictureTaskStack && writtenQuestion;
   const hideSideKicker =
     examType === "TOEFL"
+    || stackedSpeakingTask
+    || toeicTaskWithBlockHeading
     || plainPrompt
     || sharedPassage
     || multiSelectRange
@@ -91,36 +116,108 @@ export function QuestionPlayer({
   const questionsHeading = hideQuestionsHeading ? null : ownQuestionsHeading(question, startNumber, examType);
   const kickerLabel = `${kicker}${question.required ? "" : " · optional"}`;
   const kickerNode = (
-    <span
-      id={`q-${question.id}`}
-      style={{ flex: "none", whiteSpace: "nowrap", fontSize: "inherit", lineHeight: "inherit", fontWeight: 700 }}
-    >
+    <span id={`q-${question.id}`} className="question-kicker">
       {kickerLabel}
     </span>
   );
-  const toeflSpeakingVideoStack = examType === "TOEFL"
-    && engineOf(question.type) === "SPEAKING"
+  const toeflSpeakingVideoStack = stackedSpeakingExam
+    && speakingQuestion
     && speakingAutoFlow
     && questionHasTaskVideo(question);
-  const toeflVisualSplit = !teacherReview && examType === "TOEFL" && !toeflSpeakingVideoStack && items.some(
-    (item) => (item.kind === "image" || item.kind === "video") && contentItemFilled(item),
-  );
-  const visualTaskItems = toeflVisualSplit
+  const taskVisualSplit = !teacherReview
+    && (examType === "TOEFL" || examType === "TOEIC")
+    && !toeflSpeakingVideoStack
+    && !stackedSpeakingTask
+    && !toeicTaskWithBlockHeading
+    && !toeicPictureTaskStack
+    && hasVisualTaskMedia;
+  const toeicCenteredTask = examType === "TOEIC"
+    && !teacherReview
+    && !taskVisualSplit
+    && !toeicWritingVisualSplit
+    && !toeicGroupPane;
+  const visualTaskItems = (taskVisualSplit || toeicWritingVisualSplit)
     ? items.filter((item) => (item.kind === "image" || item.kind === "video") && contentItemFilled(item))
     : [];
-  const bodyTaskItems = toeflSpeakingVideoStack
-    ? items.filter((item) => item.kind !== "video")
-    : toeflVisualSplit
-      ? items.filter((item) => item.kind !== "image" && item.kind !== "video")
-      : items;
+  const bodyTaskItems = (() => {
+    let body = items;
+    if (toeflSpeakingVideoStack) {
+      body = body.filter((item) => item.kind !== "video");
+    } else if (taskVisualSplit) {
+      body = body.filter((item) => item.kind !== "image" && item.kind !== "video");
+    }
+    if (stackedSpeakingTask && examType === "TOEIC") {
+      body = body.filter((item) => {
+        if (item.kind === "audio" && item.mediaId) {
+          return false;
+        }
+        if (item.kind === "video" && contentItemFilled(item)) {
+          return false;
+        }
+        return true;
+      });
+    }
+    return body;
+  })();
+  const hideSpeakingPromptInFeed = stackedSpeakingTask && examType === "TOEIC";
   const gatedBodyItems = listeningContentGate
     ? bodyTaskItems.filter((item) => (item.kind === "audio" && item.mediaId)
       || ((item.kind === "image" || item.kind === "video") && contentItemFilled(item)))
     : bodyTaskItems;
   const showPromptText = !listeningContentGate && hasPromptText;
+  const promptTextItemId = promptItemId(items);
+  const toeicWrittenLeftStimulusItems = toeicCenteredTask && writtenQuestion
+    ? gatedBodyItems.filter((item) => {
+      if (!contentItemFilled(item)) {
+        return false;
+      }
+      if (item.id !== promptTextItemId) {
+        return true;
+      }
+      if (item.kind === "text") {
+        const doc = item.doc ?? question.promptContent;
+        return docIsOnlyTable(doc);
+      }
+      return false;
+    })
+    : [];
+  const toeicPromptTableDoc = toeicCenteredTask && writtenQuestion && showPromptText
+    ? docWithTablesOnly(question.promptContent)
+    : null;
+  const toeicWrittenStimulusSplit = toeicCenteredTask && writtenQuestion
+    && (toeicWrittenLeftStimulusItems.length > 0 || Boolean(toeicPromptTableDoc));
+  const toeicWrittenTaskDirectionsDoc = toeicWrittenStimulusSplit
+    ? (instructionHasContent(instructions)
+      ? instructions
+      : showPromptText && !docIsOnlyTable(question.promptContent)
+        ? (docWithoutTables(question.promptContent) ?? question.promptContent)
+        : null)
+    : null;
+  const suppressQuestionInstructions = toeicWrittenStimulusSplit
+    && Boolean(toeicWrittenTaskDirectionsDoc)
+    && instructionHasContent(instructions);
+  const toeicWrittenPromptAboveAnswer = toeicCenteredTask && writtenQuestion && showPromptText && !toeicWrittenStimulusSplit;
+  const stimulusFeedItems = toeicWrittenPromptAboveAnswer
+    ? gatedBodyItems.filter((item) => item.id !== promptTextItemId)
+    : gatedBodyItems;
+  const toeicWritingSplitGrid = {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+    gap: "var(--runner-toeic-column-gap)",
+    alignItems: "start",
+    width: "100%",
+  } as const;
   const renderPrompt = () => (showPromptText ? (
     hideSideKicker ? (
-      examType === "TOEFL" ? (
+      stackedSpeakingExam && speakingQuestion ? (
+        <Box className="question-prompt-row">
+          <PromptView doc={question.promptContent} />
+        </Box>
+      ) : toeicPictureTaskStack ? (
+        <Box className="question-prompt-row" ta="center">
+          <PromptView doc={question.promptContent} />
+        </Box>
+      ) : examType === "TOEFL" ? (
         <Box className="question-prompt-row">
           <PromptView doc={question.promptContent} />
         </Box>
@@ -128,16 +225,9 @@ export function QuestionPlayer({
         <PromptView doc={question.promptContent} />
       )
     ) : (
-      <Box
-        className="question-prompt-row"
-        style={{
-          display: "flex",
-          gap: "0.5rem",
-          alignItems: "baseline",
-        }}
-      >
+      <Box className="question-prompt-row">
         {kickerNode}
-        <Box style={{ flex: 1, minWidth: 0 }}>
+        <Box className="question-side__body">
           <PromptView doc={question.promptContent} />
         </Box>
       </Box>
@@ -151,9 +241,9 @@ export function QuestionPlayer({
       playbackLimit={question.settings.playbackLimit ?? 0}
       playbackKey={media.playbackScope ? `iba-plays:${media.playbackScope}:${question.id}` : undefined}
       examAudio={examAudio}
-      hideAudio={hideTaskAudio || teacherReview}
+      hideAudio={hideTaskAudio || teacherReview || hideSpeakingPromptInFeed}
       autoPlayVideo={autoPlayTaskVideo}
-      hideVideoControls={examType === "TOEFL" && !teacherReview}
+      hideVideoControls={stackedSpeakingExam && speakingAutoFlow && !teacherReview}
       teacherReview={teacherReview}
     />
   );
@@ -174,60 +264,64 @@ export function QuestionPlayer({
       demoMode={demoMode}
       {...(engineOf(question.type) === "SPEAKING" ? {
         autoFlow: speakingAutoFlow,
+        speakingPreviewStatic,
         promptAudioReady: speakingPromptReady,
-        promptAudioInFeed: !hideTaskAudio,
+        promptAudioInFeed: !hideTaskAudio && !hideSpeakingPromptInFeed,
+        speakingReadingRemaining,
         onComplete: onSpeakingComplete,
         examAudio,
         media,
       } : {})}
     />
   );
+  const toeicWrittenAnswerStack = toeicWrittenStimulusSplit ? (
+    <Stack gap="calc(var(--mantine-spacing-md) / 2)" w="100%">
+      {toeicWrittenTaskDirectionsDoc ? (
+        <Box className="question-prompt-row">
+          <PromptView doc={toeicWrittenTaskDirectionsDoc} />
+        </Box>
+      ) : null}
+      {player}
+    </Stack>
+  ) : null;
+  const toeicWrittenStimulusColumn = toeicWrittenStimulusSplit ? (
+    <Stack gap="md" w="100%">
+      {contentFeed(toeicWrittenLeftStimulusItems)}
+      {toeicWrittenLeftStimulusItems.length === 0 && toeicPromptTableDoc ? (
+        <PromptView doc={toeicPromptTableDoc} />
+      ) : null}
+    </Stack>
+  ) : null;
   const answerNode = hideAnswer || listeningContentGate ? null : hideSideKicker ? (
     <>
       <Text id={`q-${question.id}`} className="sr-only">{kickerLabel}</Text>
-      {sharedPassage && examType !== "TOEFL" && instructionHasContent(question.promptContent) && !docIsOnlyTable(question.promptContent)
+      {toeicWrittenAnswerStack ?? (toeicWrittenPromptAboveAnswer ? (
+        <Stack gap="calc(var(--mantine-spacing-md) / 2)" w="100%">
+          <Box className="question-prompt-row">
+            <PromptView doc={question.promptContent} />
+          </Box>
+          {player}
+        </Stack>
+      ) : sharedPassage && examType !== "TOEFL" && instructionHasContent(question.promptContent) && !docIsOnlyTable(question.promptContent)
         ? <Box style={passageFrameStyle}>{player}</Box>
-        : player}
+        : player)}
     </>
   ) : hasPromptText ? (
-    <Box
-      style={{
-        display: "flex",
-        gap: "0.5rem",
-        alignItems: "baseline",
-      }}
-    >
-      <span
-        aria-hidden
-        style={{
-          flex: "none",
-          whiteSpace: "nowrap",
-          fontSize: "inherit",
-          lineHeight: "inherit",
-          fontWeight: 700,
-          visibility: "hidden",
-          pointerEvents: "none",
-        }}
-      >
+    <Box className="question-answer-row">
+      <span aria-hidden className="question-kicker question-kicker--ghost">
         {kickerLabel}
       </span>
-      <Box style={{ flex: 1, minWidth: 0 }}>{player}</Box>
+      <Box className="question-side__body">{player}</Box>
     </Box>
   ) : (
-    <Box
-      style={{
-        display: "flex",
-        gap: "0.5rem",
-        alignItems: "baseline",
-      }}
-    >
+    <Box className="question-answer-row">
       {kickerNode}
-      <Box style={{ flex: 1, minWidth: 0 }}>{player}</Box>
+      <Box className="question-side__body">{player}</Box>
     </Box>
   );
   const taskBody = (
     <Stack gap="calc(var(--mantine-spacing-md) / 2)">
-      {contentFeed(gatedBodyItems)}
+      {contentFeed(stimulusFeedItems)}
       {answerNode}
     </Stack>
   );
@@ -245,7 +339,7 @@ export function QuestionPlayer({
           {questionsHeading}
         </Text>
       ) : null}
-      {!hideInstructions && instructionHasContent(instructions) ? (
+      {!hideInstructions && !suppressQuestionInstructions && instructionHasContent(instructions) ? (
         <Box>
           <PromptView doc={instructions} />
         </Box>
@@ -255,9 +349,43 @@ export function QuestionPlayer({
           ({questionsHeading})
         </Text>
       ) : null}
-      {toeflVisualSplit ? (
+      {questionBlockHeading && !teacherReview ? (
+        <Text
+          fw={700}
+          ta={examType === "TOEIC" ? "center" : undefined}
+          w={examType === "TOEIC" ? "100%" : undefined}
+          mb={examType === "TOEIC" ? "md" : undefined}
+          style={
+            examType === "TOEIC"
+              ? { fontSize: "var(--type-h6-size)", lineHeight: "var(--type-h6-line)" }
+              : { fontSize: "inherit", lineHeight: "inherit" }
+          }
+        >
+          {questionBlockHeading}
+        </Text>
+      ) : null}
+      {toeicWritingVisualSplit ? (
+        <Box
+          className="runner-question-split runner-question-split--toeic-writing"
+          data-task-visual-split=""
+          style={toeicWritingSplitGrid}
+        >
+          <Box className="runner-question-split__media">
+            <Stack gap="md" align="stretch">
+              {contentFeed(visualTaskItems)}
+              {showPromptText ? (
+                <Box className="question-prompt-row" ta="center">
+                  <PromptView doc={question.promptContent} />
+                </Box>
+              ) : null}
+            </Stack>
+          </Box>
+          <Box className="runner-question-split__task">{answerNode}</Box>
+        </Box>
+      ) : taskVisualSplit ? (
         <Box
           className="runner-question-split"
+          data-task-visual-split=""
           style={{
             display: "grid",
             gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
@@ -266,7 +394,20 @@ export function QuestionPlayer({
             width: "100%",
           }}
         >
-          <Box>{contentFeed(visualTaskItems)}</Box>
+          <Box className="runner-question-split__media">{contentFeed(visualTaskItems)}</Box>
+          <Box className="runner-question-split__task">{taskBody}</Box>
+        </Box>
+      ) : toeicWrittenStimulusSplit && toeicWrittenStimulusColumn && answerNode ? (
+        <Box
+          className="runner-question-split runner-question-split--toeic-writing"
+          data-task-visual-split=""
+          style={toeicWritingSplitGrid}
+        >
+          <Box className="runner-question-split__media">{toeicWrittenStimulusColumn}</Box>
+          <Box className="runner-question-split__task">{answerNode}</Box>
+        </Box>
+      ) : toeicCenteredTask ? (
+        <Box w="100%" maw="var(--runner-toefl-centered-pane-max)" mx="auto" className="runner-toeic-centered-task">
           {taskBody}
         </Box>
       ) : (

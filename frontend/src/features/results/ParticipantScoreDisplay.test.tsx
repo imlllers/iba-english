@@ -57,7 +57,7 @@ describe("ParticipantScoreDisplay", () => {
 
   it("uses totalMax for TOEIC overall gauge", () => {
     const toeic: ScaleResult = {
-      title: "TOEIC",
+      title: "TOEIC Listening & Reading",
       complete: true,
       total: 600,
       totalMax: 990,

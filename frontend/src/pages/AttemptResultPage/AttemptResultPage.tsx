@@ -5,6 +5,7 @@ import { normalizeExamDisplayType } from "@/entities/test/settings";
 import { effectiveResultDetail, normalizeResultDetail } from "@/entities/test/resultDisplay";
 import { publicApi } from "@/features/test-taking/publicApi";
 import { ToeflTakeShell } from "@/features/test-taking/layouts/toefl/ToeflTakeShell";
+import { stackedLayoutOf, usesStackedTakeChrome } from "@/features/test-taking/layouts/runnerLayout";
 import { TakeCenteredPage } from "@/features/test-taking/TakeCenteredPage";
 import { ParticipantLiveResultBody } from "@/features/results/ParticipantLiveResultBody";
 import { Loading } from "@/shared/ui/Loading";
@@ -33,7 +34,7 @@ export function AttemptResultPage() {
     <Box
       w="100%"
       maw={
-        examType === "TOEFL"
+        usesStackedTakeChrome(examType)
           ? "var(--runner-toefl-centered-pane-max)"
           : (resultDetail === "score_and_scale" || resultDetail === "sections_only") && data.scale
             ? 560
@@ -55,8 +56,12 @@ export function AttemptResultPage() {
     </Box>
   );
 
-  if (examType === "TOEFL") {
-    return <ToeflTakeShell centerContent>{body}</ToeflTakeShell>;
+  if (usesStackedTakeChrome(examType)) {
+    return (
+      <ToeflTakeShell layout={stackedLayoutOf(examType)} centerContent>
+        {body}
+      </ToeflTakeShell>
+    );
   }
 
   return <TakeCenteredPage>{body}</TakeCenteredPage>;

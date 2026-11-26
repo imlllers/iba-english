@@ -2,6 +2,7 @@ import { Stack, Text, Title } from "@mantine/core";
 import type { ParticipantResult } from "@/entities/attempt/types";
 import type { ExamDisplayType, ResultDetail } from "@/entities/test/types";
 import { normalizeResultDetail, resultShowsScaleSections } from "@/entities/test/resultDisplay";
+import { usesStackedTakeChrome } from "@/features/test-taking/layouts/runnerLayout";
 import { ParticipantOverallScore, ParticipantScoreDisplay } from "@/features/results/ParticipantScoreDisplay";
 
 type ParticipantLiveResultBodyProps = {
@@ -64,7 +65,7 @@ export function ParticipantLiveResultBody({
   return (
     <Stack gap="md" align="center" ta="center" w="100%">
       <Stack gap="sm" align="center" w="100%">
-        {examType === "TOEFL" ? (
+        {usesStackedTakeChrome(examType) ? (
           <Text
             fw={700}
             style={{ fontSize: "var(--type-h5-size)", lineHeight: "var(--type-h5-line)" }}

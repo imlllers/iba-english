@@ -3,14 +3,12 @@ package com.iba.testing.notification;
 import com.iba.testing.attempt.AttemptStatus;
 import com.iba.testing.attempt.ResultMailer;
 import com.iba.testing.attempt.TestAttemptRepository;
-import com.iba.testing.common.Tokens;
 import com.iba.testing.test.AccessDates;
 import com.iba.testing.test.ExamTest;
 import com.iba.testing.test.ExamTestRepository;
 import com.iba.testing.test.TestStatus;
 import com.iba.testing.user.UserAccountRepository;
 import com.iba.testing.user.UserRole;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -34,7 +32,6 @@ public class NotificationTriggers {
     private final NotificationService notifications;
     private final ExamTestRepository tests;
     private final TestAttemptRepository attempts;
-    private final JdbcTemplate jdbc;
     private final UserAccountRepository users;
     private final AdminNotificationService adminNotifications;
 
@@ -42,14 +39,12 @@ public class NotificationTriggers {
             NotificationService notifications,
             ExamTestRepository tests,
             TestAttemptRepository attempts,
-            JdbcTemplate jdbc,
             UserAccountRepository users,
             AdminNotificationService adminNotifications
     ) {
         this.notifications = notifications;
         this.tests = tests;
         this.attempts = attempts;
-        this.jdbc = jdbc;
         this.users = users;
         this.adminNotifications = adminNotifications;
     }
@@ -83,22 +78,6 @@ public class NotificationTriggers {
                 "Пароль изменён",
                 "Пароль от вашей учётной записи изменён. Если это были не вы – сразу смените пароль и сообщите администратору",
                 "/teacher/settings", null);
-    }
-
-    @Async
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-    public void onLogin(NotificationEvents.LoginSucceeded event) {
-        String fingerprint = Tokens.sha256(event.userAgent() == null ? "" : event.userAgent());
-        Integer known = jdbc.queryForObject("select count(*) from known_devices where user_id = ?", Integer.class, event.userId());
-        int inserted = jdbc.update(
-                "insert into known_devices (user_id, fingerprint, created_at) values (?, ?, now()) on conflict do nothing",
-                event.userId(), fingerprint);
-        if (inserted > 0 && known != null && known > 0 && !isAdmin(event.userId())) {
-            notifications.notify(event.userId(), NotificationType.NEW_DEVICE_LOGIN,
-                    "Вход с нового устройства",
-                    "Выполнен вход в вашу учётную запись с нового браузера или устройства. Если это были не вы – смените пароль",
-                    "/teacher/settings", null);
-        }
     }
 
     @Scheduled(fixedDelay = 300_000, initialDelay = 60_000)

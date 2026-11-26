@@ -13,6 +13,7 @@ import { errorMessage } from "@/shared/api/client";
 import { Loading } from "@/shared/ui/Loading";
 import { MessagePage } from "@/shared/ui/MessagePage";
 import { ToeflTakeShell } from "@/features/test-taking/layouts/toefl/ToeflTakeShell";
+import { stackedLayoutOf, usesStackedTakeChrome } from "@/features/test-taking/layouts/runnerLayout";
 import { TakeCenteredPage } from "@/features/test-taking/TakeCenteredPage";
 
 function endsAfterSeconds(seconds: number) {
@@ -99,7 +100,7 @@ export function PreviewPage() {
   if (submitted && test.settings.showResultToParticipant) {
     const examType = test.settings.examType ?? "CUSTOM";
     const body = (
-      <Box w="100%" maw={examType === "TOEFL" ? "var(--runner-toefl-centered-pane-max)" : 480}>
+      <Box w="100%" maw={usesStackedTakeChrome(examType) ? "var(--runner-toefl-centered-pane-max)" : 480}>
         <ParticipantResultBody
           examType={examType}
           resultDetail={test.settings.resultDetail}
@@ -111,8 +112,12 @@ export function PreviewPage() {
         />
       </Box>
     );
-    if (examType === "TOEFL") {
-      return <ToeflTakeShell centerContent>{body}</ToeflTakeShell>;
+    if (usesStackedTakeChrome(examType)) {
+      return (
+        <ToeflTakeShell layout={stackedLayoutOf(examType)} centerContent>
+          {body}
+        </ToeflTakeShell>
+      );
     }
     return <TakeCenteredPage>{body}</TakeCenteredPage>;
   }

@@ -46,7 +46,7 @@ public class ChoiceEngine implements QuestionEngine {
 
     @Override
     public void validate(QuestionDraft draft, ContentCheck check) {
-        Set<String> ids = check.items(draft.options(), "options", "Варианты", 2);
+        Set<String> ids = check.items(draft.options(), "options", "Варианты", 2, false);
         check.object(draft.answerKey(), "answerKey");
         check.complete(ids.contains(draft.answerKey().path("correctOptionId").asText("")), "answerKey", "Отметьте верный вариант");
         check.points(draft.scoringConfig(), "points");

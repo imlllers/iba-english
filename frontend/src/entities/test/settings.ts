@@ -34,6 +34,16 @@ export function normalizeQuestionNumberFormat(raw: unknown): QuestionNumberForma
     : "1";
 }
 
+function defaultQuestionNumberFormat(
+  raw: unknown,
+  examType: ExamDisplayType,
+): QuestionNumberFormat {
+  if (raw !== undefined && raw !== null && String(raw).trim() !== "") {
+    return normalizeQuestionNumberFormat(raw);
+  }
+  return examType === "TOEFL" ? "1." : "1";
+}
+
 export function normalizeQuestionNumberScope(raw: unknown): QuestionNumberScope {
   return QUESTION_NUMBER_SCOPES.includes(raw as QuestionNumberScope)
     ? (raw as QuestionNumberScope)
@@ -70,7 +80,7 @@ export function accessDatesEnabled(examType?: ExamDisplayType | null): boolean {
   return ACCESS_DATES_ENABLED || isOfficialExamType(examType);
 }
 
-export const DISABLED_EXAM_TYPES: ReadonlySet<ExamDisplayType> = new Set<ExamDisplayType>(["TOEIC"]);
+export const DISABLED_EXAM_TYPES: ReadonlySet<ExamDisplayType> = new Set<ExamDisplayType>();
 export const isExamTypeDisabled = (type: string | null | undefined) => DISABLED_EXAM_TYPES.has(type as ExamDisplayType);
 export const DISABLED_SUFFIX = " – временно недоступен";
 
@@ -116,8 +126,13 @@ export function normalizeTestSettings(
   const focus = source.focusLossMaxWarnings;
   const attempts = source.maxAttempts;
   const examType = normalizeExamDisplayType(source.examType, examPreset);
-  const questionNumberScope =
-    examType === "TOEFL" ? "part" : normalizeQuestionNumberScope(source.questionNumberScope);
+  const toeicSwScale = source.scoreScale?.sourceId === "toeic_sw"
+    || source.scoreScale?.scale?.id === "toeic_sw";
+  const questionNumberScope = examType === "TOEFL"
+    ? "part"
+    : examPreset === "TOEIC_SW" || toeicSwScale
+      ? "section"
+      : normalizeQuestionNumberScope(source.questionNumberScope);
   return {
     requireParticipantName: true,
     requireParticipantEmail: source.requireParticipantEmail !== false,
@@ -128,7 +143,7 @@ export function normalizeTestSettings(
     focusLossMaxWarnings: typeof focus === "number" && focus > 0 ? focus : null,
     audioAutoStart: Boolean(source.audioAutoStart),
     videoAutoStart: normalizeVideoAutoStart(source),
-    questionNumberFormat: normalizeQuestionNumberFormat(source.questionNumberFormat),
+    questionNumberFormat: defaultQuestionNumberFormat(source.questionNumberFormat, examType),
     questionNumberScope,
     examType,
     oneQuestionPerPage: source.oneQuestionPerPage !== false,

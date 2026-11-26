@@ -12,10 +12,13 @@ const panelShellStyle: CSSProperties = {
   boxShadow: "var(--mantine-shadow-sm)",
 };
 
+const scrollPositions = new Map<string, number>();
+
 type RunnerScrollPaneProps = {
   className?: string;
   children: ReactNode;
   variant?: "panel" | "embed";
+  persistScrollKey?: string;
   style?: CSSProperties;
 };
 
@@ -23,6 +26,7 @@ export function RunnerScrollPane({
   className,
   children,
   variant = "panel",
+  persistScrollKey,
   style,
 }: RunnerScrollPaneProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -41,20 +45,35 @@ export function RunnerScrollPane({
     setThumb({ top, size: canScroll ? Math.max(size, 0.12) : 1 });
   }, []);
 
+  const onScroll = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    if (persistScrollKey) {
+      scrollPositions.set(persistScrollKey, el.scrollTop);
+    }
+    sync();
+  }, [persistScrollKey, sync]);
+
   useLayoutEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
+    if (persistScrollKey) {
+      const saved = scrollPositions.get(persistScrollKey);
+      if (saved != null) {
+        el.scrollTop = saved;
+      }
+    }
     sync();
-    el.addEventListener("scroll", sync, { passive: true });
+    el.addEventListener("scroll", onScroll, { passive: true });
     const ro = new ResizeObserver(sync);
     ro.observe(el);
     const inner = el.firstElementChild;
     if (inner) ro.observe(inner);
     return () => {
-      el.removeEventListener("scroll", sync);
+      el.removeEventListener("scroll", onScroll);
       ro.disconnect();
     };
-  }, [sync, children]);
+  }, [sync, onScroll, children, persistScrollKey]);
 
   const isPanel = variant === "panel";
   const shellStyle: CSSProperties = isPanel

@@ -1,7 +1,9 @@
-import { ActionIcon, Alert, Badge, Card, Group, Stack, TextInput, Tooltip } from "@mantine/core";
+import { ActionIcon, Alert, Badge, Button, Card, Group, Stack, TextInput, Tooltip } from "@mantine/core";
+import { SettingsSectionTitle } from "@/shared/ui/SettingsSectionTitle";
 import { useEffect, useRef, useState } from "react";
 import type { ContentItem, Doc } from "@/entities/question/types";
-import type { ExamDisplayType, SectionPart } from "@/entities/test/types";
+import type { ExamDisplayType, PartExample, SectionPart, SectionType } from "@/entities/test/types";
+import { emptyPartExample } from "@/features/question-types/content/partExample";
 import { ContentFeedEditor } from "@/features/question-types/content/ContentFeedEditor";
 import { scopeItems } from "@/features/question-types/content/contentItems";
 import { serializeInstructionDoc, toInstructionDoc } from "@/features/question-types/content/instructionDoc";
@@ -10,13 +12,14 @@ import type { PartInput } from "@/features/tests/testsApi";
 import { errorMessage } from "@/shared/api/client";
 import { Icon } from "@/shared/ui/Icon";
 import { Select } from "@/shared/ui/Select";
-import { SettingsHint } from "@/shared/ui/SettingsHint";
 import { MaterialLivePreview } from "./MaterialLivePreview";
+import { PartExampleEditor } from "./PartExampleEditor";
 
 type PartFormProps = {
   part: SectionPart;
   alone: boolean;
   examType?: ExamDisplayType;
+  sectionType?: SectionType | null;
   defaultOneQuestionPerPage?: boolean;
   focused?: boolean;
   onActivate?: () => void;
@@ -28,6 +31,7 @@ export function PartForm({
   part,
   alone,
   examType = "CUSTOM",
+  sectionType = null,
   defaultOneQuestionPerPage = true,
   focused = false,
   onActivate,
@@ -38,7 +42,9 @@ export function PartForm({
   const [instructions, setInstructions] = useState<Doc>(() => toInstructionDoc(part.instructions));
   const [items, setItems] = useState<ContentItem[]>(() => scopeItems(part));
   const [oneQuestionPerPage, setOneQuestionPerPage] = useState<boolean | null>(() => part.oneQuestionPerPage ?? null);
+  const [example, setExample] = useState<PartExample | null>(() => part.example ?? null);
   const [error, setError] = useState("");
+  const showExample = examType === "TOEIC" || examType === "CUSTOM";
   const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
@@ -48,6 +54,7 @@ export function PartForm({
     setInstructions(toInstructionDoc(part.instructions));
     setItems(scopeItems(part));
     setOneQuestionPerPage(part.oneQuestionPerPage ?? null);
+    setExample(part.example ?? null);
   }, [part.id, part.oneQuestionPerPage]);
 
   const persist = (patch: Partial<{
@@ -55,11 +62,13 @@ export function PartForm({
     instructions: Doc;
     items: ContentItem[];
     oneQuestionPerPage: boolean | null;
+    example: PartExample | null;
   }>) => {
     const nextTitle = patch.title ?? title;
     const nextInstructions = patch.instructions ?? instructions;
     const nextItems = patch.items ?? items;
     const nextOne = patch.oneQuestionPerPage !== undefined ? patch.oneQuestionPerPage : oneQuestionPerPage;
+    const nextExample = patch.example !== undefined ? patch.example : example;
     const next: PartInput = {
       title: nextTitle,
       instructions: serializeInstructionDoc(nextInstructions),
@@ -67,6 +76,7 @@ export function PartForm({
       timeLimitSeconds: part.timeLimitSeconds ?? null,
       oneQuestionPerPage: nextOne,
       items: nextItems,
+      ...(showExample ? { example: nextExample } : {}),
     };
     window.clearTimeout(timer.current);
     if (!next.title.trim()) {
@@ -102,54 +112,84 @@ export function PartForm({
             </Tooltip>
           </Group>
           {error ? <Alert color="red" variant="light">{error}</Alert> : null}
-          <TextInput
-            label="Название части"
-            withAsterisk
-            value={title}
-            maxLength={200}
-            placeholder="Введите название"
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              setTitle(value);
-              persist({ title: value });
-            }}
-          />
-          <InstructionsField
-            label="Инструкция к части"
-            value={instructions}
-            onChange={(doc) => {
-              setInstructions(doc);
-              persist({ instructions: doc });
-            }}
-          />
+          <Stack gap="md" component="section" aria-label="Основные">
+            <SettingsSectionTitle>Основные</SettingsSectionTitle>
+            <Group align="flex-end" gap="md" grow wrap="wrap">
+              <TextInput
+                label="Название части"
+                withAsterisk
+                value={title}
+                maxLength={200}
+                placeholder="Введите название"
+                style={{ flex: "1 1 16rem", minWidth: "min(100%, 16rem)" }}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  setTitle(value);
+                  persist({ title: value });
+                }}
+              />
+              <Select
+                label="Показ вопросов в этой части"
+                value={oneQuestionPerPage === null ? "inherit" : oneQuestionPerPage ? "one" : "all"}
+                options={[
+                  {
+                    value: "inherit",
+                    label: `Как во всём тесте (${defaultOneQuestionPerPage ? "по одному" : "все на одном экране"})`,
+                  },
+                  { value: "one", label: "По одному на экране" },
+                  { value: "all", label: "Все на одном экране" },
+                ]}
+                style={{ flex: "1 1 16rem", minWidth: "min(100%, 16rem)" }}
+                onChange={(value) => {
+                  const next = value === "one" ? true : value === "all" ? false : null;
+                  setOneQuestionPerPage(next);
+                  persist({ oneQuestionPerPage: next });
+                }}
+              />
+            </Group>
+            <InstructionsField
+              label="Инструкция"
+              value={instructions}
+              onChange={(doc) => {
+                setInstructions(doc);
+                persist({ instructions: doc });
+              }}
+            />
+          </Stack>
           <ContentFeedEditor
             title="Контент к части"
+            titleSize="lg"
             items={items}
             onChange={(next) => {
               setItems(next);
               persist({ items: next });
             }}
+            addActions={
+              showExample && !example ? (
+                <Button variant="subtle" size="compact-sm" leftSection={<Icon name="plus" />} onClick={() => {
+                  const next = emptyPartExample();
+                  setExample(next);
+                  persist({ example: next });
+                }}
+                >
+                  Пример
+                </Button>
+              ) : null
+            }
           />
-          <Stack gap={4}>
-            <Select
-              label="Показ вопросов в этой части"
-              value={oneQuestionPerPage === null ? "inherit" : oneQuestionPerPage ? "one" : "all"}
-              options={[
-                {
-                  value: "inherit",
-                  label: `Как во всём тесте (${defaultOneQuestionPerPage ? "по одному" : "все на одном экране"})`,
-                },
-                { value: "one", label: "По одному на экране" },
-                { value: "all", label: "Все на одном экране" },
-              ]}
-              onChange={(value) => {
-                const next = value === "one" ? true : value === "all" ? false : null;
-                setOneQuestionPerPage(next);
-                persist({ oneQuestionPerPage: next });
+          {showExample && example ? (
+            <PartExampleEditor
+              example={example}
+              onChange={(next) => {
+                setExample(next);
+                persist({ example: next });
+              }}
+              onRemove={() => {
+                setExample(null);
+                persist({ example: null });
               }}
             />
-            <SettingsHint>Можно задать отдельно для этой части</SettingsHint>
-          </Stack>
+          ) : null}
 
         </Stack>
       </Card>
@@ -158,8 +198,10 @@ export function PartForm({
         title={title}
         instructions={instructions}
         items={items}
+        example={example}
         examType={examType}
         previewScope="part"
+        sectionType={sectionType}
       />
     </Stack>
   );

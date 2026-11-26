@@ -250,7 +250,7 @@ public class ScoreScaleService {
         ArrayNode sections = mapper.createArrayNode();
         sections.add(section(mapper, "Listening", 5, 495, 5, tableConvert(mapper, 100, table)));
         sections.add(section(mapper, "Reading", 5, 495, 5, tableConvert(mapper, 100, table.deepCopy())));
-        return exam(mapper, "toeic", "TOEIC", sections, "sum", null, levels(mapper,
+        return exam(mapper, "toeic", "TOEIC Listening & Reading", sections, "sum", null, levels(mapper,
                 "A1", 120, 220, "A2", 225, 545, "B1", 550, 780, "B2", 785, 940, "C1", 945, 990));
     }
 

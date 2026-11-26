@@ -8,6 +8,7 @@ import { SettingsHint } from "@/shared/ui/SettingsHint";
 import { useMedia } from "../../media/MediaContext";
 import { SpeakingResponseMeter } from "./SpeakingResponseMeter";
 import { TOEFL_SPEAKING_RECORD_ARM_MS, TOEFL_SPEAKING_RESPONSE_CUE_SRC } from "./speakingCue";
+import { acquireSpeakingMic, holdSpeakingMic } from "./speakingMic";
 import { trackSpeakingUpload } from "./speakingUploadQueue";
 
 type Recording = { mediaId?: string; durationSeconds?: number };
@@ -35,7 +36,6 @@ type VoiceRecorderProps = {
   onChange: (value: Recording) => void;
   autoFlow?: boolean;
   autoStart?: boolean;
-  showRecordCue?: boolean;
   playbackWide?: boolean;
   onComplete?: () => void;
 };
@@ -48,7 +48,6 @@ export function VoiceRecorder({
   onChange,
   autoFlow = false,
   autoStart = false,
-  showRecordCue = false,
   playbackWide = false,
   onComplete,
 }: VoiceRecorderProps) {
@@ -73,6 +72,11 @@ export function VoiceRecorder({
   const mediaRef = useRef(media);
   mediaRef.current = media;
   const unmountedRef = useRef(false);
+  const autoFlowArmedRef = useRef(false);
+  const sharedMicRef = useRef(false);
+  const heldMicRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   const clearTimer = () => {
     if (timer.current !== null) {
@@ -82,8 +86,20 @@ export function VoiceRecorder({
   };
 
   const stopTracks = () => {
+    if (sharedMicRef.current) {
+      stream.current = null;
+      return;
+    }
     stream.current?.getTracks().forEach((track) => track.stop());
     stream.current = null;
+  };
+
+  const failStart = (message: string) => {
+    if (unmountedRef.current) {
+      return;
+    }
+    setError(message);
+    setPhase("idle");
   };
 
   const persistBlob = (blob: Blob, extension: string, duration: number) => {
@@ -101,30 +117,54 @@ export function VoiceRecorder({
     })());
   };
 
-  useEffect(() => () => {
-    unmountedRef.current = true;
-    clearTimer();
-    if (cueArmTimer.current !== null) {
-      window.clearTimeout(cueArmTimer.current);
-      cueArmTimer.current = null;
-    }
-    cueAudio.current?.pause();
-    cueAudio.current = null;
-    const rec = recorder.current;
-    if (rec && rec.state !== "inactive") {
-      try {
-        rec.requestData();
-      } catch {
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      autoFlowArmedRef.current = false;
+      clearTimer();
+      if (cueArmTimer.current !== null) {
+        window.clearTimeout(cueArmTimer.current);
+        cueArmTimer.current = null;
       }
-      try {
-        rec.stop();
-      } catch {
+      cueAudio.current?.pause();
+      cueAudio.current = null;
+      const rec = recorder.current;
+      if (rec && rec.state !== "inactive") {
+        try {
+          rec.requestData();
+        } catch {
+        }
+        try {
+          rec.stop();
+        } catch {
+          stopTracks();
+        }
+      } else {
         stopTracks();
       }
-    } else {
-      stopTracks();
-    }
+    };
   }, []);
+
+  useEffect(() => {
+    if (!autoFlow || readOnly || !autoStart) {
+      return;
+    }
+    let cancelled = false;
+    heldMicRef.current = true;
+    void holdSpeakingMic()
+      .then((mic) => {
+        if (cancelled || unmountedRef.current) {
+          return;
+        }
+        stream.current = mic;
+        sharedMicRef.current = true;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [autoFlow, readOnly, autoStart]);
 
   useEffect(() => () => {
     if (localUrl) {
@@ -133,13 +173,27 @@ export function VoiceRecorder({
   }, [localUrl]);
 
   const playBeepThenRecord = () => {
+    if (cueArmTimer.current !== null || recorder.current) {
+      return;
+    }
     cueAudio.current?.pause();
     const audio = new Audio(TOEFL_SPEAKING_RESPONSE_CUE_SRC);
     cueAudio.current = audio;
+    let began = false;
     const beginRecording = () => {
+      if (began || unmountedRef.current) {
+        return;
+      }
+      began = true;
+      if (cueArmTimer.current !== null) {
+        window.clearTimeout(cueArmTimer.current);
+        cueArmTimer.current = null;
+      }
+      cueAudio.current?.pause();
       cueAudio.current = null;
       void record();
     };
+    cueArmTimer.current = window.setTimeout(beginRecording, 1500);
     audio.addEventListener("ended", beginRecording, { once: true });
     audio.addEventListener("error", beginRecording, { once: true });
     void audio.play().catch(() => {
@@ -147,28 +201,59 @@ export function VoiceRecorder({
     });
   };
 
-  useEffect(() => {
-    if (!autoFlow || !autoStart || readOnly || hasRecording) {
-      if (phase === "cue") {
-        setPhase("idle");
+  const startAutoPreparation = () => {
+    const begin = Date.now();
+    setSeconds(preparationSeconds);
+    setPhase("preparing");
+    timer.current = window.setInterval(() => {
+      const left = preparationSeconds - Math.floor((Date.now() - begin) / 1000);
+      if (left <= 0) {
+        clearTimer();
+        setSeconds(0);
+        playBeepThenRecord();
+        return;
       }
-      return;
-    }
-    if (phase !== "idle") {
-      return;
-    }
+      setSeconds(left);
+    }, 250);
+  };
+
+  const startAutoResponseCue = () => {
     setPhase("cue");
     cueArmTimer.current = window.setTimeout(() => {
       cueArmTimer.current = null;
       playBeepThenRecord();
     }, TOEFL_SPEAKING_RECORD_ARM_MS);
-    return () => {
+  };
+
+  useEffect(() => {
+    const clearAutoFlowTimers = () => {
+      clearTimer();
       if (cueArmTimer.current !== null) {
         window.clearTimeout(cueArmTimer.current);
         cueArmTimer.current = null;
       }
-      setPhase("idle");
+      cueAudio.current?.pause();
+      cueAudio.current = null;
     };
+
+    const shouldRun = autoFlow && autoStart && !readOnly && !hasRecording;
+    if (!shouldRun) {
+      if (autoFlowArmedRef.current && (!autoFlow || readOnly || hasRecording)) {
+        clearAutoFlowTimers();
+        autoFlowArmedRef.current = false;
+        setPhase((current) => (current === "cue" || current === "preparing" ? "idle" : current));
+      }
+      return;
+    }
+    if (autoFlowArmedRef.current) {
+      return;
+    }
+    autoFlowArmedRef.current = true;
+    if (preparationSeconds > 0) {
+      startAutoPreparation();
+    } else {
+      startAutoResponseCue();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoFlow, autoStart, readOnly, hasRecording]);
 
@@ -176,8 +261,8 @@ export function VoiceRecorder({
     if (!autoFlow || !value.mediaId || phase !== "idle") {
       return;
     }
-    onComplete?.();
-  }, [autoFlow, value.mediaId, phase, onComplete]);
+    onCompleteRef.current?.();
+  }, [autoFlow, value.mediaId, phase]);
 
   const stop = () => {
     if (recorder.current && recorder.current.state === "recording") {
@@ -193,25 +278,41 @@ export function VoiceRecorder({
     setError("");
     const format = pickFormat();
     if (!format || !navigator.mediaDevices?.getUserMedia) {
-      setError("Recording is not supported in this browser. Try Chrome, Firefox, Edge or Safari.");
-      setPhase("idle");
+      failStart("Recording is not supported in this browser. Try Chrome, Firefox, Edge or Safari.");
       return;
     }
     try {
-      stream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      if (!unmountedRef.current) {
-        setError("Microphone access denied. Allow access in your browser settings and try again.");
-        setPhase("idle");
+      if (autoFlow) {
+        if (!heldMicRef.current) {
+          heldMicRef.current = true;
+          stream.current = await holdSpeakingMic();
+        } else {
+          stream.current = await acquireSpeakingMic();
+        }
+        sharedMicRef.current = true;
+      } else {
+        stream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
+    } catch {
+      failStart("Microphone access denied. Allow access in your browser settings and try again.");
       return;
     }
     if (unmountedRef.current) {
       stopTracks();
       return;
     }
+    if (!stream.current) {
+      failStart("Could not start recording. Please try again.");
+      return;
+    }
     const chunks: Blob[] = [];
-    const instance = new MediaRecorder(stream.current, { mimeType: format.mime });
+    let instance: MediaRecorder;
+    try {
+      instance = new MediaRecorder(stream.current, { mimeType: format.mime });
+    } catch {
+      failStart("Could not start recording. Please try again.");
+      return;
+    }
     recorder.current = instance;
     instance.ondataavailable = (event) => event.data.size > 0 && chunks.push(event.data);
     instance.onstop = () => {
@@ -240,7 +341,13 @@ export function VoiceRecorder({
     };
     started.current = Date.now();
     setSeconds(0);
-    instance.start(1000);
+    try {
+      instance.start(1000);
+    } catch {
+      recorder.current = null;
+      failStart("Could not start recording. Please try again.");
+      return;
+    }
     setPhase("recording");
     timer.current = window.setInterval(() => {
       const elapsed = Math.floor((Date.now() - started.current) / 1000);
@@ -319,16 +426,19 @@ export function VoiceRecorder({
 
   if (autoFlow) {
     const responseActive = phase === "recording" || phase === "uploading";
-    const showResponseBlock = timed && (phase === "cue" || responseActive);
+    const showPrepBlock = phase === "preparing" && preparationSeconds > 0;
+    const showResponseBlock = timed && responseActive;
     const remaining = timed
       ? (responseActive ? Math.max(0, maxSeconds - seconds) : maxSeconds)
       : 0;
     return (
       <Stack gap="sm" align="center" w="100%">
-        {phase === "cue" && showRecordCue ? (
-          <Alert color="yellow" variant="light" p="sm" w="100%" maw={480}>
-            Your response will be recorded. You will hear a tone when recording starts
-          </Alert>
+        {showPrepBlock ? (
+          <SpeakingResponseMeter
+            label="Preparation Time"
+            remainingSeconds={seconds}
+            totalSeconds={preparationSeconds}
+          />
         ) : null}
         {showResponseBlock ? (
           <SpeakingResponseMeter remainingSeconds={remaining} totalSeconds={maxSeconds} />
@@ -347,7 +457,24 @@ export function VoiceRecorder({
               <Button size="sm" variant="default" onClick={() => void retryUpload()}>
                 Send again
               </Button>
-            ) : null}
+            ) : (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => {
+                  setError("");
+                  autoFlowArmedRef.current = false;
+                  if (preparationSeconds > 0) {
+                    startAutoPreparation();
+                  } else {
+                    startAutoResponseCue();
+                  }
+                  autoFlowArmedRef.current = true;
+                }}
+              >
+                Try again
+              </Button>
+            )}
           </Stack>
         ) : null}
       </Stack>
@@ -358,7 +485,6 @@ export function VoiceRecorder({
     <Stack gap="sm">
       <Text
         fw={500}
-        c={phase === "recording" ? "red" : undefined}
         style={{ fontVariantNumeric: "tabular-nums" }}
         aria-live="polite"
       >

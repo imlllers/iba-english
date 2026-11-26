@@ -10,6 +10,9 @@ import { TOEFL_SPEAKING_VIDEO_DELAY_MS } from "@/features/test-taking/layouts/to
 import { VideoPlayer } from "@/shared/ui/VideoPlayer";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { speakingRecordLimitSeconds } from "./speakingRecordLimit";
+import { questionReadingSeconds } from "@/features/test-taking/readingPhase";
+import { readSpeakingPrepStart, speakingPrepSecondsLeft, speakingPrepStorageKey } from "./speakingPrep";
+import { SpeakingResponseMeter } from "./SpeakingResponseMeter";
 
 type SpeakingPlayerProps = PlayerProps & {
   autoFlow?: boolean;
@@ -18,6 +21,8 @@ type SpeakingPlayerProps = PlayerProps & {
   onComplete?: () => void;
   examAudio?: ExamAudioBinding;
   media?: MediaResolver | null;
+  speakingReadingRemaining?: number;
+  speakingPreviewStatic?: boolean;
 };
 
 export function SpeakingPlayer({
@@ -26,14 +31,28 @@ export function SpeakingPlayer({
   onAnswer,
   readOnly,
   examType,
-  demoMode = false,
   autoFlow = false,
   promptAudioReady = true,
   promptAudioInFeed = false,
   onComplete,
   examAudio,
   media,
+  speakingReadingRemaining,
+  speakingPreviewStatic = false,
 }: SpeakingPlayerProps) {
+  const readingTotal = questionReadingSeconds(question);
+  const prepTotal = autoFlow ? Math.max(0, question.settings.preparationSeconds ?? 0) : 0;
+  const hasAnswer = Boolean(answer.mediaId);
+  const showReadingMeter = Boolean(
+    autoFlow
+    && readingTotal > 0
+    && typeof speakingReadingRemaining === "number",
+  );
+  const prepStorageKey = media?.playbackScope
+    ? speakingPrepStorageKey(media.playbackScope, question.id)
+    : null;
+  const [prepLeft, setPrepLeft] = useState<number | null>(null);
+  const prepDone = prepTotal <= 0 || prepLeft === 0;
   const promptAudio = useMemo(
     () => questionItems(question).find((item) => item.kind === "audio" && item.mediaId),
     [question],
@@ -65,6 +84,35 @@ export function SpeakingPlayer({
     }
   }, [autoFlow, hasPrompt, promptAudio, promptVideo, promptAudioInFeed, alreadyDone, question.id]);
 
+  useEffect(() => {
+    if (
+      speakingPreviewStatic
+      || !autoFlow
+      || readOnly
+      || hasAnswer
+      || prepTotal <= 0
+      || !promptAudioReady
+      || showReadingMeter
+    ) {
+      return;
+    }
+    const startedAt = prepStorageKey ? readSpeakingPrepStart(prepStorageKey) : Date.now();
+    const tick = () => {
+      const left = speakingPrepSecondsLeft(startedAt, prepTotal);
+      setPrepLeft(left);
+      return left;
+    };
+    if (tick() <= 0) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      if (tick() <= 0) {
+        window.clearInterval(timer);
+      }
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [autoFlow, hasAnswer, prepStorageKey, prepTotal, promptAudioReady, readOnly, showReadingMeter, speakingPreviewStatic]);
+
   const finishAudioPrompt = () => {
     if (promptVideo) {
       return;
@@ -81,14 +129,15 @@ export function SpeakingPlayer({
 
   const gateOwnsPrompt = Boolean(examAudio?.locked && audioKey);
   const promptAudioActive = !gateOwnsPrompt || audioKey === examAudio?.activeKey;
+  const taskReady = promptAudioReady && prepDone && !showReadingMeter;
   const promptAutoPlay = gateOwnsPrompt
     ? Boolean(
       examAudio?.autoPlay
-      && promptAudioReady
+      && taskReady
       && promptAudioActive
       && !alreadyDone,
     )
-    : Boolean(promptAudioReady && !alreadyDone);
+    : Boolean(taskReady && !alreadyDone);
 
   const showTaskVideo = Boolean(autoFlow && promptVideo && media);
   const showPromptPlayer = Boolean(
@@ -98,7 +147,7 @@ export function SpeakingPlayer({
     && !promptVideo
     && !promptDone
     && !promptAudioInFeed
-    && promptAudioReady
+    && taskReady
     && promptAudioActive,
   );
 
@@ -109,7 +158,7 @@ export function SpeakingPlayer({
           <VideoPlayer
             src={media!.asset(promptVideo!.mediaId!)}
             aria-label="Task video"
-            autoPlay={promptAudioReady && !promptDone}
+            autoPlay={taskReady && !promptDone}
             autoPlayDelayMs={TOEFL_SPEAKING_VIDEO_DELAY_MS}
             seekable={false}
             controlsHidden
@@ -140,14 +189,28 @@ export function SpeakingPlayer({
           />
         </Box>
       ) : null}
+      {showReadingMeter ? (
+        <SpeakingResponseMeter
+          label="Reading Time"
+          icon="book"
+          remainingSeconds={speakingReadingRemaining ?? 0}
+          totalSeconds={readingTotal}
+        />
+      ) : null}
+      {autoFlow && prepTotal > 0 && !prepDone && promptAudioReady && !showReadingMeter && !hasAnswer ? (
+        <SpeakingResponseMeter
+          label="Preparation Time"
+          remainingSeconds={prepLeft ?? prepTotal}
+          totalSeconds={prepTotal}
+        />
+      ) : null}
       <VoiceRecorder
         value={{ mediaId: answer.mediaId as string | undefined, durationSeconds: answer.durationSeconds as number | undefined }}
         maxSeconds={speakingRecordLimitSeconds(question.settings.maxSeconds, examType)}
-        preparationSeconds={question.settings.preparationSeconds ?? 0}
+        preparationSeconds={autoFlow ? 0 : (question.settings.preparationSeconds ?? 0)}
         readOnly={readOnly}
         autoFlow={autoFlow}
-        autoStart={autoFlow && promptDone && promptAudioReady}
-        showRecordCue={Boolean(promptVideo) && !demoMode}
+        autoStart={autoFlow && taskReady && promptDone && !speakingPreviewStatic}
         onChange={(value) => onAnswer(value)}
         onComplete={onComplete}
       />

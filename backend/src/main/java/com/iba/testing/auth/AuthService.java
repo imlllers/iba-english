@@ -102,7 +102,6 @@ public class AuthService {
             session.setMaxInactiveInterval(SessionConfig.REMEMBER_ME_SECONDS);
         }
         account.setLastLoginAt(OffsetDateTime.now());
-        events.publishEvent(new NotificationEvents.LoginSucceeded(account.getId(), request.getHeader("User-Agent")));
         return account;
     }
 

@@ -9,7 +9,6 @@ export type NotificationType =
   | "TEST_CLOSED"
   | "RESULT_EMAIL_FAILED"
   | "PASSWORD_CHANGED"
-  | "NEW_DEVICE_LOGIN"
   | "TEST_SHARED"
   | "TEST_SHARE_ACCEPTED"
   | "TEST_SHARE_DECLINED"
@@ -73,7 +72,6 @@ export const NOTIFICATION_GROUPS: { anchor: string; title: string; items: { type
     title: "Учётная запись",
     items: [
       { type: "PASSWORD_CHANGED", label: "Пароль изменён", description: "Пароль от вашей учётной записи сменили" },
-      { type: "NEW_DEVICE_LOGIN", label: "Вход с нового устройства", description: "Вход выполнен из браузера или устройства, которого раньше не было" },
     ],
   },
 ];

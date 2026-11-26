@@ -1,6 +1,7 @@
 import type { ContentItem, Doc, DocNode } from "@/entities/question/types";
 import type { ExamDisplayType } from "@/entities/test/types";
 import { contentItemFilled } from "./contentItems";
+import { instructionHasContent } from "./instructionDoc";
 
 export const passageFrameStyle = {
   border: "1px solid var(--mantine-color-gray-4)",
@@ -24,6 +25,20 @@ function isMeaningfulBlock(node: DocNode): boolean {
 export function docIsOnlyTable(doc: Doc | null | undefined): boolean {
   const meaningful = (doc?.content ?? []).filter(isMeaningfulBlock);
   return meaningful.length > 0 && meaningful.every((node) => node.type === "table");
+}
+
+export function docWithTablesOnly(doc: Doc | null | undefined): Doc | null {
+  const tables = (doc?.content ?? []).filter((node) => node.type === "table");
+  if (tables.length === 0) {
+    return null;
+  }
+  return { type: "doc", content: tables };
+}
+
+export function docWithoutTables(doc: Doc | null | undefined): Doc | null {
+  const rest = (doc?.content ?? []).filter((node) => node.type !== "table");
+  const trimmed = { type: "doc" as const, content: rest };
+  return instructionHasContent(trimmed) ? trimmed : null;
 }
 
 export function shouldFrameContentItems(items: ContentItem[], examType?: ExamDisplayType | null): boolean {

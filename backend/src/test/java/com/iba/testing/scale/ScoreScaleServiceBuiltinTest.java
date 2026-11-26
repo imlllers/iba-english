@@ -64,6 +64,7 @@ class ScoreScaleServiceBuiltinTest {
   void builtinToeic() {
     JsonNode scale = service.starterCopy("toeic");
     assertNotNull(scale);
+    assertEquals("TOEIC Listening & Reading", scale.path("title").asText());
     assertEquals("sum", scale.path("aggregate").asText());
     assertEquals(2, scale.path("sections").size());
     for (JsonNode level : scale.path("levels")) {

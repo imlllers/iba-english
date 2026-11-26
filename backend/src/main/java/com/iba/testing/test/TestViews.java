@@ -56,10 +56,13 @@ public class TestViews {
         return node;
     }
 
-    public ObjectNode publicView(JsonNode snapshot, JsonNode settings) {
+    public ObjectNode publicView(JsonNode snapshot, JsonNode settings, String examPreset) {
         ObjectNode node = mapper.createObjectNode();
         node.put("title", snapshot.path("title").asText(""));
         node.put("description", snapshot.path("description").asText(""));
+        if (examPreset != null && !examPreset.isBlank()) {
+            node.put("examPreset", examPreset);
+        }
         node.set("settings", publicSettings(settings));
         boolean shuffleChoices = settings.path("shuffleChoices").asBoolean(false);
         ArrayNode sectionsNode = node.putArray("sections");
@@ -185,6 +188,11 @@ public class TestViews {
         }
         putNullableBoolean(node, "oneQuestionPerPage", part.getOneQuestionPerPage());
         putNullableBoolean(node, "autoAdvanceOnTimeout", part.getAutoAdvanceOnTimeout());
+        if (part.getExample() == null || part.getExample().isNull()) {
+            node.putNull("example");
+        } else {
+            node.set("example", part.getExample());
+        }
         node.put("orderIndex", part.getOrderIndex());
         return node;
     }

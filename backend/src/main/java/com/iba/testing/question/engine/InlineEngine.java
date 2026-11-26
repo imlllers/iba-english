@@ -27,6 +27,7 @@ public class InlineEngine implements QuestionEngine {
     static final String GAP = "gap";
     static final String TAIL = "tail";
     static final String DROPDOWN = "dropdown";
+    static final String SHARED_DROPDOWN_CHOICES_KEY = "__shared__";
     private static final Set<String> KINDS = Set.of(GAP, TAIL, DROPDOWN);
     private static final int MAX_PREFIX = 100;
 
@@ -108,10 +109,27 @@ public class InlineEngine implements QuestionEngine {
         check.shape(choices.isMissingNode() || choices.isObject(), "options", "Некорректные варианты пропусков");
         check.shape(prefixes.isMissingNode() || prefixes.isObject(), "options", "Некорректное начало слова");
         check.shape(key.isMissingNode() || key.isObject(), "answerKey", "Некорректные ответы для пропусков");
+        boolean sharedDropdown = draft.options().path("sharedDropdownChoices").asBoolean(false);
+        Set<String> sharedOptionIds = null;
+        if (sharedDropdown) {
+            JsonNode sharedList = choices.path(SHARED_DROPDOWN_CHOICES_KEY);
+            boolean hasDropdown = blanks.values().stream().anyMatch(DROPDOWN::equals);
+            check.complete(!hasDropdown || !sharedList.isMissingNode(), "options", "Добавьте общий список вариантов");
+            if (!sharedList.isMissingNode()) {
+                sharedOptionIds = check.items(sharedList, "options", "Варианты списка", 2);
+            }
+        }
         for (Map.Entry<String, String> entry : blanks.entrySet()) {
             String id = entry.getKey();
             check.shape(KINDS.contains(entry.getValue()), "promptContent", "Неизвестный вид пропуска");
             if (DROPDOWN.equals(entry.getValue())) {
+                if (sharedDropdown) {
+                    check.complete(sharedOptionIds != null, "options", "Добавьте общий список вариантов");
+                    if (sharedOptionIds != null) {
+                        check.complete(sharedOptionIds.contains(key.path(id).asText("")), "answerKey", "Отметьте верный вариант в каждом списке");
+                    }
+                    continue;
+                }
                 JsonNode list = choices.get(id);
                 check.complete(list != null, "options", "Добавьте варианты для каждого выпадающего списка");
                 if (list != null) {
